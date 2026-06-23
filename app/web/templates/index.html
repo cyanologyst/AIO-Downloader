@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AIO Downloader</title>
+  <meta name="description" content="A focused standalone workspace for authorized downloads.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <a class="brand" href="#" data-tab-target="downloads" aria-label="AIO Downloader">
+        <span>AIO</span> Downloader
+      </a>
+
+      <button class="button button-primary new-download-button" id="openDownloadDialog" type="button" aria-label="New download">
+        <i class="ti ti-plus" aria-hidden="true"></i>
+        <span>New download</span>
+      </button>
+
+      <nav class="primary-tabs" role="tablist" aria-label="Primary">
+        <button class="primary-tab active" type="button" role="tab" aria-selected="true" data-tab="downloads">Downloads</button>
+        <button class="primary-tab" type="button" role="tab" aria-selected="false" data-tab="torrents">Torrent Search</button>
+        <button class="primary-tab" type="button" role="tab" aria-selected="false" data-tab="settings">Settings</button>
+      </nav>
+
+      <button class="icon-button" id="themeToggle" type="button" aria-label="Toggle theme" title="Toggle theme">
+        <i class="ti ti-moon" aria-hidden="true"></i>
+      </button>
+    </header>
+
+    <main class="main-content">
+      <section class="tab-panel active" id="downloadsPanel" role="tabpanel">
+        <div class="downloads-surface">
+          <div class="downloads-toolbar">
+            <div class="status-filters" id="historyTabs" aria-label="Filter downloads">
+              <button class="filter-button active" type="button" data-filter="all">All <span id="allCount">0</span></button>
+              <button class="filter-button" type="button" data-filter="active">Active <span id="activeCount">0</span></button>
+              <button class="filter-button" type="button" data-filter="completed">Completed <span id="completedCount">0</span></button>
+              <button class="filter-button" type="button" data-filter="failed">Failed <span id="failedCount">0</span></button>
+              <button class="filter-button" type="button" data-filter="cancelled">Cancelled <span id="cancelledCount">0</span></button>
+            </div>
+
+            <div class="toolbar-actions">
+              <label class="inline-search" for="downloadSearchInput">
+                <i class="ti ti-search" aria-hidden="true"></i>
+                <input id="downloadSearchInput" type="search" placeholder="Search in downloads…">
+              </label>
+              <button class="button button-outline" id="clearHistoryButton" type="button" aria-label="Clear finished downloads">
+                <i class="ti ti-trash" aria-hidden="true"></i>
+                <span>Clear finished</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="list-heading">
+            <span id="downloadsHeading">All downloads</span>
+            <span id="overallSpeed">0 B/s</span>
+          </div>
+          <div class="download-list" id="downloadList"></div>
+          <div class="list-footer" id="recentCount">0 downloads</div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="torrentsPanel" role="tabpanel" hidden>
+        <div class="page-heading">
+          <div>
+            <h1>Torrent Search</h1>
+            <p>Search an index or inspect a local torrent, then choose exactly what to download.</p>
+          </div>
+          <label class="button button-outline torrent-upload">
+            <i class="ti ti-file-upload" aria-hidden="true"></i>
+            <span>Inspect .torrent</span>
+            <input id="torrentFileInput" type="file" accept=".torrent,application/x-bittorrent">
+          </label>
+        </div>
+
+        <form id="torrentSearchForm" class="torrent-search-shell">
+          <label class="torrent-query">
+            <i class="ti ti-search" aria-hidden="true"></i>
+            <input id="torrentSearchInput" type="search" placeholder="Search movies, music, software…">
+          </label>
+          <label>
+            <span>Indexer</span>
+            <select id="torrentProviderInput">
+              <option value="tpb">The Pirate Bay</option>
+              <option value="rarbg">RARBG-style</option>
+              <option value="prowlarr">Prowlarr</option>
+            </select>
+          </label>
+          <label>
+            <span>Category</span>
+            <select id="torrentCategoryInput">
+              <option value="all">All categories</option>
+              <option value="movies">Movies / Video</option>
+              <option value="tv">TV</option>
+              <option value="anime">Anime</option>
+              <option value="music">Music / Audio</option>
+              <option value="apps">Apps</option>
+              <option value="games">Games</option>
+              <option value="books">Books</option>
+              <option value="adult">Adult</option>
+            </select>
+          </label>
+          <label>
+            <span>Sort by</span>
+            <select id="torrentSortInput">
+              <option value="seeders">Seeders</option>
+              <option value="date">Date</option>
+              <option value="size">Size</option>
+              <option value="leechers">Leechers</option>
+              <option value="title">Name</option>
+            </select>
+          </label>
+          <label>
+            <span>Order</span>
+            <select id="torrentOrderInput">
+              <option value="desc">High → low</option>
+              <option value="asc">Low → high</option>
+            </select>
+          </label>
+          <button class="button button-primary" type="submit">
+            <i class="ti ti-search" aria-hidden="true"></i>
+            <span>Search</span>
+          </button>
+        </form>
+
+        <div class="torrent-results-header">
+          <span>Name</span><span>Size</span><span>Seeds</span><span>Date</span><span>Indexer</span><span></span>
+        </div>
+        <div id="torrentResults" class="torrent-results"></div>
+        <div id="torrentPagination" class="torrent-pagination" hidden>
+          <button id="torrentPreviousButton" class="button button-outline" type="button"><i class="ti ti-chevron-left"></i>Previous</button>
+          <span id="torrentPageSummary">Page 1</span>
+          <button id="torrentNextButton" class="button button-outline" type="button">Next<i class="ti ti-chevron-right"></i></button>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="settingsPanel" role="tabpanel" hidden>
+        <div class="page-heading">
+          <div>
+            <h1>Settings</h1>
+            <p>Defaults and integrations for the local downloader.</p>
+          </div>
+          <button class="button button-primary" type="submit" form="settingsForm" aria-label="Save settings">
+            <i class="ti ti-device-floppy" aria-hidden="true"></i>
+            <span>Save changes</span>
+          </button>
+        </div>
+
+        <form id="settingsForm" class="settings-layout">
+          <section class="settings-section">
+            <div class="settings-section-title">
+              <h2>General</h2>
+              <p>Storage and queue behavior.</p>
+            </div>
+            <div class="settings-fields">
+              <label class="field field-wide">Download directory
+                <div class="input-icon-end"><input name="download_dir" type="text"><i class="ti ti-folder"></i></div>
+              </label>
+              <label class="field">Max concurrent downloads
+                <input name="max_concurrent_downloads" type="number" min="1" max="16">
+              </label>
+              <label class="field">Default video quality
+                <select name="default_video_quality">
+                  <option value="best">Best available</option>
+                  <option value="1080p">1080p</option>
+                  <option value="720p">720p</option>
+                  <option value="480p">480p</option>
+                </select>
+              </label>
+              <label class="field">Default audio format
+                <select name="default_audio_format">
+                  <option value="mp3">MP3</option>
+                  <option value="m4a">M4A</option>
+                  <option value="opus">Opus</option>
+                </select>
+              </label>
+              <label class="switch-field">
+                <span><strong>Auto-convert manga to PDF</strong><small>Create a PDF when a gallery finishes.</small></span>
+                <input name="manga_auto_convert_pdf" type="checkbox"><span class="switch"></span>
+              </label>
+              <label class="switch-field">
+                <span><strong>Remove images after PDF</strong><small>Keep only the finished document.</small></span>
+                <input name="manga_remove_images_after_pdf" type="checkbox"><span class="switch"></span>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <div class="settings-section-title">
+              <h2>yt-dlp</h2>
+              <p>Authentication and network overrides.</p>
+            </div>
+            <div class="settings-fields">
+              <label class="field field-wide">Cookies file
+                <div class="input-icon-end"><input name="ytdlp_cookies_file" type="text"><i class="ti ti-file"></i></div>
+              </label>
+              <label class="field">Proxy <small>Optional</small>
+                <input name="ytdlp_proxy" type="text" placeholder="socks5://127.0.0.1:1080">
+              </label>
+              <label class="field">Deno executable <small>Hanime only</small>
+                <input name="deno_bin" type="text">
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <div class="settings-section-title">
+              <h2>Torrent indexers</h2>
+              <p>Search endpoints and Prowlarr access.</p>
+            </div>
+            <div class="settings-fields">
+              <label class="field">TPB API URL<input name="tpb_api_url" type="text"></label>
+              <label class="field">RARBG-style base URL<input name="rarbg_base_url" type="text"></label>
+              <label class="field">Prowlarr URL<input name="prowlarr_url" type="text"></label>
+              <label class="field">Prowlarr API key<input name="prowlarr_api_key" type="password"></label>
+              <label class="field">Prowlarr result limit<input name="prowlarr_search_limit" type="number" min="1" max="100"></label>
+            </div>
+          </section>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="downloadDialog" class="dialog">
+    <form id="downloadForm" class="dialog-content">
+      <div class="dialog-header">
+        <div><h2>New download</h2><p>Add one link per line for batch downloads.</p></div>
+        <button class="icon-button dialog-close" type="button" aria-label="Close"><i class="ti ti-x"></i></button>
+      </div>
+
+      <label class="field">URL, magnet link, or torrent URL
+        <div class="composer-input">
+          <i class="ti ti-link" aria-hidden="true"></i>
+          <textarea id="urlInput" rows="2" placeholder="Paste a link here…" required></textarea>
+        </div>
+        <span id="extractorProbe" class="extractor-probe" aria-live="polite"></span>
+      </label>
+
+      <label class="field">Type
+        <select id="modeInput">
+          <option value="auto">Auto detect</option>
+          <option value="youtube">Video</option>
+          <option value="audio">Audio</option>
+          <option value="torrent">Torrent</option>
+          <option value="direct">Direct file</option>
+          <option value="gallery">Gallery / Manga</option>
+          <option value="spotify">Spotify</option>
+        </select>
+        <small id="modeHint">Automatically detect the best download method.</small>
+      </label>
+
+      <div class="dialog-separator"></div>
+      <div class="options-heading">
+        <div><strong>Options</strong><span id="modeBadge">Auto</span><small>Only relevant settings are shown.</small></div>
+        <button class="text-button" id="resetDownloadOptions" type="button">Reset</button>
+      </div>
+
+      <div class="context-options" id="contextOptions">
+        <label class="field option-video">Video quality
+          <select id="qualityInput">
+            <option value="best">Best available</option>
+            <option value="1080p">1080p</option>
+            <option value="720p">720p</option>
+            <option value="480p">480p</option>
+            <option value="audio">Audio only</option>
+          </select>
+        </label>
+        <label class="field option-audio">Audio format
+          <select id="audioFormatInput">
+            <option value="mp3">MP3</option>
+            <option value="m4a">M4A</option>
+            <option value="opus">Opus</option>
+          </select>
+        </label>
+        <label class="checkbox-field option-gallery">
+          <input id="convertPdfInput" type="checkbox">
+          <span><strong>Convert gallery to PDF</strong><small>Create a single document after download.</small></span>
+        </label>
+        <label class="checkbox-field option-playlist">
+          <input id="playlistInput" type="checkbox">
+          <span><strong>Playlist / profile</strong><small>Review and select items before downloading.</small></span>
+        </label>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="button button-outline dialog-close" type="button">Cancel</button>
+        <button class="button button-primary" type="submit" id="startButton">
+          <i class="ti ti-download" aria-hidden="true"></i>
+          <span>Start download</span>
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="batchDialog" class="dialog batch-dialog">
+    <div class="dialog-content batch-dialog-content">
+      <div class="dialog-header">
+        <div>
+          <h2 id="batchDialogTitle">Review batch</h2>
+          <p id="batchDialogSubtitle">Choose what should be downloaded.</p>
+        </div>
+        <button class="icon-button batch-dialog-close" type="button" aria-label="Close batch review"><i class="ti ti-x"></i></button>
+      </div>
+
+      <div class="batch-summary">
+        <div><strong id="batchTotalCount">0</strong><span>items found</span></div>
+        <div><strong id="batchSelectedCount">0</strong><span>selected</span></div>
+        <div><strong id="batchEstimatedSize">Unknown</strong><span>estimated size</span></div>
+        <div><strong id="batchFreeSpace">Unknown</strong><span>free space</span></div>
+      </div>
+
+      <div id="batchWarning" class="batch-warning" hidden></div>
+
+      <div class="batch-toolbar">
+        <label class="inline-search" for="batchSearchInput">
+          <i class="ti ti-search" aria-hidden="true"></i>
+          <input id="batchSearchInput" type="search" placeholder="Search items…">
+        </label>
+        <div class="batch-presets" aria-label="Batch selection presets">
+          <button class="button button-outline" type="button" data-batch-preset="10">First 10</button>
+          <button class="button button-outline" type="button" data-batch-preset="25">First 25</button>
+          <button class="button button-outline" type="button" data-batch-preset="50">First 50</button>
+          <button class="button button-outline" type="button" data-batch-preset="all">Select all</button>
+          <button class="button button-outline" type="button" data-batch-preset="none">Clear</button>
+        </div>
+      </div>
+
+      <form id="batchRangeForm" class="batch-range-form">
+        <label>From<input id="batchRangeFrom" type="number" min="1" value="1"></label>
+        <label>To<input id="batchRangeTo" type="number" min="1" value="20"></label>
+        <button class="button button-outline" type="submit">Select range</button>
+      </form>
+
+      <div class="batch-list-heading">
+        <label><input id="batchToggleVisible" type="checkbox"> Select visible</label>
+        <span>Items are processed sequentially to keep resource use predictable.</span>
+      </div>
+      <div id="batchItemList" class="batch-item-list"></div>
+
+      <div class="batch-footer">
+        <label class="checkbox-field compact-checkbox">
+          <input id="batchContinueInput" type="checkbox" checked>
+          <span><strong>Continue after failed items</strong><small>Failures remain available for one-click retry.</small></span>
+        </label>
+        <div class="dialog-actions">
+          <button class="button button-outline batch-dialog-close" type="button">Cancel</button>
+          <button id="startBatchButton" class="button button-primary" type="button">
+            <i class="ti ti-download"></i><span>Start selected</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="torrentDialog" class="dialog">
+    <div class="dialog-content torrent-dialog-content">
+      <div class="dialog-header">
+        <div><h2>Select torrent files</h2><p id="torrentDialogName"></p></div>
+        <button class="icon-button torrent-dialog-close" type="button" aria-label="Close"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="torrent-selection-actions">
+        <span id="torrentSelectionSummary">All files selected</span>
+        <button id="selectAllTorrentFiles" class="text-button" type="button">Toggle all</button>
+      </div>
+      <div id="torrentFileList" class="torrent-file-list"></div>
+      <div class="dialog-actions">
+        <button class="button button-outline torrent-dialog-close" type="button">Cancel</button>
+        <button id="downloadSelectedTorrentFiles" class="button button-primary" type="button">Download selected</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
