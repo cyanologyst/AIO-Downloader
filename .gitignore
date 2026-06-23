@@ -9,6 +9,7 @@ config/jobs.json
 config/batches/
 Download/
 logs/
+dist/
 design/
 design-qa.md
 *.session

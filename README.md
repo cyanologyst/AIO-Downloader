@@ -141,6 +141,26 @@ Torrent features:
 - Deno, for Hanime support
 - Optional Prowlarr instance for multi-indexer torrent search
 
+## 📦 Release format
+
+The first release ships as a **portable source app**:
+
+- unzip the release package;
+- run the platform bootstrap script;
+- the script creates `.venv`, installs Python dependencies, copies
+  `.env.example` to `.env`, and starts the local dashboard.
+
+For Windows/macOS/Ubuntu, this is a better first release format than a single
+"portable executable" because AIO Downloader relies on platform-specific tools
+such as `ffmpeg`, `aria2c`, `Deno`, `yt-dlp`, and `spotDL`. Native installers can
+be added later per OS once the runtime/toolchain expectations settle.
+
+Release package command:
+
+```powershell
+.\scripts\package-release.ps1 -Version 1.0.0
+```
+
 ## 🚀 Windows install
 
 ```powershell
@@ -149,6 +169,13 @@ python -m venv .venv
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 Copy-Item .env.example .env
+```
+
+Or use the release runner:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\run-windows.ps1
 ```
 
 If system tools are missing:
@@ -160,6 +187,16 @@ winget install DenoLand.Deno
 ```
 
 Edit `.env` after copying it from `.env.example`.
+
+## 🍎 macOS / 🐧 Ubuntu quick start
+
+Install Python 3.11+, `ffmpeg`, `aria2`, and Deno with your package manager,
+then run:
+
+```bash
+chmod +x scripts/run-unix.sh
+./scripts/run-unix.sh
+```
 
 ## ▶️ Run
 
