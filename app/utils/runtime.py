@@ -36,6 +36,12 @@ def webview_data_dir() -> Path:
     return user_data_root() / "webview"
 
 
+def default_download_dir() -> Path:
+    if is_frozen():
+        return Path.home().expanduser().resolve() / "Downloads" / "AIO Downloader"
+    return app_root() / "Download"
+
+
 def managed_tools_root() -> Path:
     return app_root() / "tools"
 

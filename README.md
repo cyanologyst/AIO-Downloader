@@ -146,25 +146,30 @@ Torrent features:
 
 ## 📦 Release format
 
-The first release ships as a **portable desktop source app**:
+Windows ships as a native **setup executable**:
 
-- unzip the release package;
-- run the platform bootstrap script;
-- the script creates `.venv`, installs Python dependencies, copies
-  `.env.example` to `.env`, and opens the app in a native desktop window.
+- one `AIO-Downloader-Setup-vX.Y.Z.exe` file;
+- installs the desktop app under the current user profile;
+- bundles Python, app libraries, `yt-dlp`, `spotDL`, `aria2c`, `ffmpeg`,
+  `ffprobe`, and Deno;
+- installs Microsoft Edge WebView2 Runtime automatically when it is missing;
+- creates Start Menu / optional desktop shortcuts and a normal uninstaller.
 
-For Windows/macOS/Ubuntu, this is a better first release format than a single
-"portable executable" because AIO Downloader relies on platform-specific tools
-such as `ffmpeg`, `aria2c`, `Deno`, `yt-dlp`, and `spotDL`. Native installers can
-be added later per OS once the runtime/toolchain expectations settle.
-
-Release package command:
+Windows setup command:
 
 ```powershell
-.\scripts\package-release.ps1 -Version 1.0.0
+.\scripts\package-windows-setup.ps1 -Version 1.0.0 -RebuildBundle
 ```
 
-## 🚀 Windows install
+The portable folder/zip can still be generated for debugging:
+
+```powershell
+.\scripts\package-windows-bundle.ps1 -Version 1.0.0
+```
+
+macOS and Ubuntu packaging will be added later as platform-specific installers.
+
+## 🚀 Windows development install
 
 ```powershell
 python -m venv .venv

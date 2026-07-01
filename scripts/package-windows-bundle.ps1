@@ -85,6 +85,16 @@ if (Test-Path $PackageDir) {
 }
 New-Item -ItemType Directory -Force -Path $PackageDir | Out-Null
 Copy-Item -LiteralPath $AppDir -Destination $PackageDir -Recurse -Force
+$PackagedAppDir = Join-Path $PackageDir "AIO Downloader"
+foreach ($runtimeDir in @("Download", "logs", "config", "webview")) {
+  $candidate = Join-Path $PackagedAppDir $runtimeDir
+  if (Test-Path -LiteralPath $candidate) {
+    Remove-Item -LiteralPath $candidate -Recurse -Force
+  }
+}
+Get-ChildItem -LiteralPath $PackagedAppDir -Recurse -Force -File -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -like "*.rpc-secret" -or $_.Name -like "*.session" } |
+  Remove-Item -Force
 Copy-Item -LiteralPath ".env.example" -Destination (Join-Path $PackageDir ".env.example") -Force
 Copy-Item -LiteralPath "README.md" -Destination (Join-Path $PackageDir "README.md") -Force
 

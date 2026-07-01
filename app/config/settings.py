@@ -15,6 +15,7 @@ from app.utils.runtime import (
     bundled_binary,
     bundled_tool,
     config_dir,
+    default_download_dir,
     managed_binary,
 )
 
@@ -29,7 +30,7 @@ def _bool(value: str | bool | None, default: bool) -> bool:
 
 @dataclass(slots=True)
 class Settings:
-    download_dir: str = "Download"
+    download_dir: str = str(default_download_dir())
     web_host: str = "127.0.0.1"
     web_port: int = 5000
     ytdlp_cookies_file: str = ""
@@ -65,8 +66,9 @@ class Settings:
         managed_ffmpeg = managed_binary("ffmpeg")
         managed_spotdl = managed_binary("spotdl")
         managed_deno = managed_binary("deno")
+        default_download = str(default_download_dir())
         return cls(
-            download_dir=os.getenv("DOWNLOAD_DIR", "Download"),
+            download_dir=os.getenv("DOWNLOAD_DIR", default_download),
             web_host=os.getenv("WEB_HOST", "127.0.0.1"),
             web_port=int(os.getenv("WEB_PORT", "5000")),
             ytdlp_cookies_file=os.getenv("YTDLP_COOKIES_FILE", ""),
