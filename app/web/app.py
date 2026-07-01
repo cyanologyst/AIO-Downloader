@@ -37,6 +37,7 @@ from app.services.torrent_search import (
     TorrentSearchError,
 )
 from app.utils.paths import safe_existing_path
+from app.utils.runtime import config_dir
 from app.utils.subprocess_utils import subprocess_window_options
 
 
@@ -68,7 +69,7 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
     registry = DownloaderRegistry([spotify, gallery, aria2, ytdlp])
     jobs = JobService(registry, store)
     batches = BatchManifestService(
-        Path("config/batches"),
+        config_dir() / "batches",
         download_dir=settings.download_path,
         cookies_file=settings.ytdlp_cookies_file,
         proxy=settings.ytdlp_proxy,

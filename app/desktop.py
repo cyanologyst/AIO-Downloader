@@ -5,13 +5,13 @@ import socket
 import threading
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from werkzeug.serving import BaseWSGIServer, make_server
 
 from app.config import SettingsStore
 from app.main import configure_logging
+from app.utils.runtime import webview_data_dir
 from app.web.app import create_app
 
 
@@ -107,7 +107,9 @@ def main() -> None:
 
     if window:
         window.events.closed += cleanup
-    webview.start(private_mode=False, storage_path=str(Path("config/webview").resolve()))
+    storage_path = webview_data_dir()
+    storage_path.mkdir(parents=True, exist_ok=True)
+    webview.start(private_mode=False, storage_path=str(storage_path.resolve()))
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $Root
+$RootPath = $Root.Path
 
 function Find-Tool($Name) {
   $cmd = Get-Command $Name -ErrorAction SilentlyContinue
@@ -44,15 +45,17 @@ $PyInstallerArgs = @(
   "--collect-all", "yt_dlp",
   "--collect-all", "hanime_plugin",
   "--collect-all", "spotdl",
+  "--collect-all", "tls_client",
+  "--collect-all", "pykakasi",
   "--collect-all", "curl_cffi",
   "--collect-all", "certifi",
   "--collect-all", "clr_loader",
   "--collect-all", "pythonnet",
   "--hidden-import", "bottle",
   "--hidden-import", "proxy_tools",
-  "--add-data", "app\web\templates;app\web\templates",
-  "--add-data", "app\web\static;app\web\static",
-  "--add-data", "assets;assets",
+  "--add-data", "$RootPath\app\web\templates;app\web\templates",
+  "--add-data", "$RootPath\app\web\static;app\web\static",
+  "--add-data", "$RootPath\assets;assets",
   "--add-binary", "$BundleBin\aria2c.exe;bin",
   "--add-binary", "$BundleBin\ffmpeg.exe;bin",
   "--add-binary", "$BundleBin\deno.exe;bin"
@@ -65,7 +68,13 @@ if (Test-Path -LiteralPath (Join-Path $BundleBin "ffprobe.exe")) {
 $PyInstallerArgs += "app\launcher.py"
 
 python -m pip install --upgrade pyinstaller
+if ($LASTEXITCODE -ne 0) {
+  throw "pip failed with exit code $LASTEXITCODE"
+}
 python -m PyInstaller @PyInstallerArgs
+if ($LASTEXITCODE -ne 0) {
+  throw "PyInstaller failed with exit code $LASTEXITCODE"
+}
 
 $AppDir = Join-Path $Root "dist\windows\AIO Downloader"
 $PackageDir = Join-Path $Root "dist\AIO-Downloader-Windows-v$Version"
@@ -78,6 +87,36 @@ New-Item -ItemType Directory -Force -Path $PackageDir | Out-Null
 Copy-Item -LiteralPath $AppDir -Destination $PackageDir -Recurse -Force
 Copy-Item -LiteralPath ".env.example" -Destination (Join-Path $PackageDir ".env.example") -Force
 Copy-Item -LiteralPath "README.md" -Destination (Join-Path $PackageDir "README.md") -Force
+
+$ReleaseNotes = @"
+AIO Downloader Windows v$Version
+================================
+
+How to run
+----------
+Double-click "AIO Downloader\AIO Downloader.exe".
+
+Bundled runtime/tools
+---------------------
+- Python runtime and Python packages used by the app
+- yt-dlp launcher
+- spotDL launcher
+- aria2c
+- ffmpeg / ffprobe
+- deno
+
+User data location
+------------------
+The packaged app stores settings, logs, batches, and webview data under:
+%LOCALAPPDATA%\AIO Downloader
+
+Known Windows release notes
+---------------------------
+- Microsoft Edge WebView2 Runtime is required by pywebview. Most Windows 10/11 installs already include it.
+- The executable is currently unsigned, so Windows SmartScreen or antivirus software may warn on first launch.
+- Some websites still require valid cookies, login access, or network availability.
+"@
+Set-Content -LiteralPath (Join-Path $PackageDir "RELEASE-NOTES.txt") -Value $ReleaseNotes -Encoding UTF8
 
 if (Test-Path $Zip) {
   Remove-Item -LiteralPath $Zip -Force

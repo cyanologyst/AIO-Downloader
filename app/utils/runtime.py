@@ -17,6 +17,25 @@ def resource_root() -> Path:
     return Path(getattr(sys, "_MEIPASS", app_root())).resolve()
 
 
+def user_data_root() -> Path:
+    if not is_frozen():
+        return app_root()
+    base = os.getenv("LOCALAPPDATA") or os.getenv("APPDATA") or str(Path.home())
+    return Path(base).expanduser().resolve() / "AIO Downloader"
+
+
+def config_dir() -> Path:
+    return user_data_root() / "config"
+
+
+def log_dir() -> Path:
+    return user_data_root() / "logs"
+
+
+def webview_data_dir() -> Path:
+    return user_data_root() / "webview"
+
+
 def managed_tools_root() -> Path:
     return app_root() / "tools"
 

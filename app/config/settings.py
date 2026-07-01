@@ -14,6 +14,7 @@ from app.utils.runtime import (
     apply_managed_tool_path,
     bundled_binary,
     bundled_tool,
+    config_dir,
     managed_binary,
 )
 
@@ -126,7 +127,7 @@ class Settings:
 
 class SettingsStore:
     def __init__(self, path: Path | None = None) -> None:
-        self.path = path or Path("config/settings.json")
+        self.path = path or config_dir() / "settings.json"
         self._lock = RLock()
         self._settings = Settings.from_env()
         self._load_file()

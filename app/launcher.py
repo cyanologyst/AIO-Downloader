@@ -6,7 +6,7 @@ from app.utils.runtime import app_root
 
 
 def _run_ytdlp(args: list[str]) -> int:
-    from yt_dlp.__init__ import main
+    from yt_dlp import main
 
     sys.argv = ["yt-dlp", *args]
     main()
