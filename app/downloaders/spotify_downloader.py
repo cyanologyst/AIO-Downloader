@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import re
+import sys
 from pathlib import Path
 
 from app.downloaders.base import BaseDownloader, DownloadContext
 from app.models import DownloadArtifact, DownloadRequest, DownloadResult
 from app.utils.paths import snapshot_files
-from app.utils.subprocess_utils import require_executable, terminate_process
+from app.utils.subprocess_utils import require_executable, subprocess_window_options, terminate_process
+from app.utils.runtime import is_bundled_tool
 
 SPOTIFY_RE = re.compile(
     r"https?://open\.spotify\.com/(?:intl-[a-z]{2}/)?"
@@ -34,7 +36,7 @@ class SpotifyDownloader(BaseDownloader):
         request.destination.mkdir(parents=True, exist_ok=True)
         before = snapshot_files(request.destination)
         command = [
-            require_executable(self.binary, "spotDL"),
+            *self._binary_command(),
             "download",
             request.url,
             "--output",
@@ -52,6 +54,7 @@ class SpotifyDownloader(BaseDownloader):
             *command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            **subprocess_window_options(),
         )
         self._processes[context.job_id] = process
         lines: list[str] = []
@@ -85,3 +88,8 @@ class SpotifyDownloader(BaseDownloader):
             return False
         await terminate_process(process)
         return True
+
+    def _binary_command(self) -> list[str]:
+        if is_bundled_tool(self.binary, "spotdl"):
+            return [sys.executable, "--aio-tool", "spotdl"]
+        return [require_executable(self.binary, "spotDL")]

@@ -10,6 +10,7 @@ import httpx
 from app.downloaders.aria2_rpc import Aria2Config, Aria2RpcClient
 from app.downloaders.base import BaseDownloader, DownloadContext
 from app.models import DownloadArtifact, DownloadRequest, DownloadResult
+from app.utils.subprocess_utils import subprocess_window_options
 
 DIRECT_EXTENSIONS = {
     ".7z", ".apk", ".avi", ".bin", ".bz2", ".csv", ".deb", ".dmg", ".doc",
@@ -156,6 +157,7 @@ async def inspect_torrent(binary: str, torrent_path: Path) -> list[dict[str, str
         str(torrent_path),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
+        **subprocess_window_options(),
     )
     stdout, _ = await process.communicate()
     if process.returncode:

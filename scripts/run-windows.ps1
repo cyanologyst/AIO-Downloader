@@ -21,5 +21,5 @@ if (-not $SkipInstall) {
   & $Python -m pip install -r requirements.txt
 }
 
-Write-Host "Starting AIO Downloader at http://127.0.0.1:5050" -ForegroundColor Green
-& $Python -m app.main
+Write-Host "Starting AIO Downloader desktop app..." -ForegroundColor Green
+& $Python -m app.desktop

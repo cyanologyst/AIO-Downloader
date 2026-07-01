@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import yt_dlp
 
@@ -191,7 +192,7 @@ class BatchManifestService:
                     title=str(entry.get("title") or f"Item {index}"),
                     duration_seconds=int(duration) if duration else None,
                     size_bytes=int(size) if size else None,
-                    thumbnail_url=str(entry.get("thumbnail") or "") or None,
+                    thumbnail_url=self._thumbnail_url(entry, item_url),
                 )
             )
         return (
@@ -210,3 +211,32 @@ class BatchManifestService:
     def _url_title(url: str) -> str:
         value = url.rstrip("/").rsplit("/", 1)[-1]
         return value.replace("-", " ").title() or "Batch item"
+
+    @staticmethod
+    def _thumbnail_url(entry: dict[str, Any], item_url: str) -> str | None:
+        thumbnail = str(entry.get("thumbnail") or "").strip()
+        if thumbnail:
+            return thumbnail
+        video_id = str(entry.get("id") or "").strip() or BatchManifestService._youtube_video_id(item_url)
+        if video_id and BatchManifestService._is_youtube_url(item_url):
+            return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+        return None
+
+    @staticmethod
+    def _is_youtube_url(url: str) -> bool:
+        host = (urlparse(url).hostname or "").lower().removeprefix("www.")
+        return host in {"youtube.com", "youtu.be", "m.youtube.com", "music.youtube.com"}
+
+    @staticmethod
+    def _youtube_video_id(url: str) -> str:
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower().removeprefix("www.")
+        if host == "youtu.be":
+            return parsed.path.strip("/").split("/", 1)[0]
+        if host in {"youtube.com", "m.youtube.com", "music.youtube.com"}:
+            if parsed.path == "/watch":
+                return (parse_qs(parsed.query).get("v") or [""])[0]
+            if parsed.path.startswith("/shorts/") or parsed.path.startswith("/embed/"):
+                parts = parsed.path.strip("/").split("/", 1)
+                return parts[1] if len(parts) > 1 else ""
+        return ""

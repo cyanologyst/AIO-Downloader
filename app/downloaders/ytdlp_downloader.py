@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import re
 import shutil
+import sys
 import threading
 import time
 from pathlib import Path
@@ -25,7 +26,8 @@ from app.services.video_sites import (
     requires_generic_impersonation,
 )
 from app.utils.paths import snapshot_files
-from app.utils.subprocess_utils import require_executable, terminate_process
+from app.utils.subprocess_utils import require_executable, subprocess_window_options, terminate_process
+from app.utils.runtime import is_bundled_tool
 
 
 class YtdlpDownloader(BaseDownloader):
@@ -456,6 +458,7 @@ class YtdlpDownloader(BaseDownloader):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             cwd=str(destination),
+            **subprocess_window_options(),
         )
         self._processes[context.job_id] = process
         self._progress_samples[context.job_id] = (time.monotonic(), 0)
@@ -526,7 +529,7 @@ class YtdlpDownloader(BaseDownloader):
         referer: str | None,
     ) -> list[str]:
         command = [
-            require_executable(self.binary, "yt-dlp"),
+            *self._binary_command(),
             "--newline",
             "--no-colors",
             "--no-playlist",
@@ -574,6 +577,11 @@ class YtdlpDownloader(BaseDownloader):
             command += ["--js-runtimes", f"deno:{deno}"]
         command.append(download_url)
         return command
+
+    def _binary_command(self) -> list[str]:
+        if is_bundled_tool(self.binary, "yt-dlp"):
+            return [sys.executable, "--aio-tool", "yt-dlp"]
+        return [require_executable(self.binary, "yt-dlp")]
 
     def _destination(self, request: DownloadRequest) -> Path:
         assert request.destination

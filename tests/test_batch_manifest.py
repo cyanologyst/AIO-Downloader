@@ -35,3 +35,21 @@ def test_manifest_persists_and_selects_items(tmp_path: Path):
     assert selected == (manifest.items[1],)
     assert loaded.to_dict()["estimated_size_bytes"] == 300
     assert loaded.items[0].thumbnail_url == "https://img.example.com/1.jpg"
+
+
+def test_youtube_playlist_thumbnail_fallback_from_id():
+    thumbnail = BatchManifestService._thumbnail_url(
+        {"id": "dQw4w9WgXcQ"},
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    )
+
+    assert thumbnail == "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+
+
+def test_youtube_playlist_thumbnail_fallback_from_url():
+    thumbnail = BatchManifestService._thumbnail_url(
+        {},
+        "https://youtu.be/dQw4w9WgXcQ",
+    )
+
+    assert thumbnail == "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"

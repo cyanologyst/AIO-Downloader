@@ -11,6 +11,8 @@ const state = {
   torrentTotal: 0,
   torrentHasPrevious: false,
   torrentHasNext: false,
+  torrentPageSize: 20,
+  torrentLastQuery: "",
   activeTab: "downloads",
   expandedJobs: new Set(),
   renderedJobSignature: null,
@@ -22,6 +24,7 @@ const state = {
   batchQuery: "",
   eventSource: null,
   fallbackPoll: null,
+  confirmResolve: null,
 };
 
 const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
@@ -50,11 +53,38 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 document.addEventListener("DOMContentLoaded", async () => {
+  initDesktopShell();
+  initDialogs();
   bindInteractions();
   applySavedTheme();
   await Promise.all([loadSettings(), refreshJobs()]);
+  await loadDependencyHealth();
   connectJobEvents();
 });
+
+function initDesktopShell() {
+  const params = new URLSearchParams(window.location.search);
+  const desktop = params.get("desktop") === "1" || Boolean(window.pywebview);
+  document.body.classList.toggle("desktop-mode", desktop);
+  if (!desktop) return;
+  $("#desktopMinimizeButton")?.addEventListener("click", () => window.pywebview?.api?.minimize?.());
+  $("#desktopCloseButton")?.addEventListener("click", () => window.pywebview?.api?.close?.());
+}
+
+function initDialogs() {
+  $$("dialog").forEach((dialog) => {
+    dialog.inert = true;
+    dialog.addEventListener("close", () => {
+      dialog.inert = true;
+      dialog.classList.remove("closing");
+    });
+    dialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      closeDialog(dialog);
+    });
+    dialog.addEventListener("keydown", trapDialogFocus);
+  });
+}
 
 function bindInteractions() {
   $$(".primary-tab").forEach((button) => button.addEventListener("click", () => switchTab(button.dataset.tab)));
@@ -70,24 +100,48 @@ function bindInteractions() {
   $("#downloadDialog").addEventListener("click", closeOnBackdrop);
   $("#torrentDialog").addEventListener("click", closeOnBackdrop);
   $("#batchDialog").addEventListener("click", closeOnBackdrop);
+  $("#confirmDialog").addEventListener("click", closeOnBackdrop);
+  $$(".confirm-cancel").forEach((button) => button.addEventListener("click", () => resolveConfirm(false)));
+  $("#confirmActionButton").addEventListener("click", () => resolveConfirm(true));
   $("#downloadForm").addEventListener("submit", startDownload);
-  $("#urlInput").addEventListener("input", scheduleExtractorProbe);
+  $("#urlInput").addEventListener("input", () => {
+    updateDownloadValidation();
+    scheduleExtractorProbe();
+  });
   $("#modeInput").addEventListener("change", (event) => {
     state.mode = event.target.value;
     updateContextOptions();
+    updateDownloadValidation();
   });
   $("#resetDownloadOptions").addEventListener("click", resetDownloadOptions);
 
+  $$("#historyTabs .filter-button").forEach((item) => {
+    item.setAttribute("aria-pressed", String(item.classList.contains("active")));
+  });
   $("#historyTabs").addEventListener("click", (event) => {
     const button = event.target.closest("[data-filter]");
     if (!button) return;
     state.filter = button.dataset.filter;
-    $$("#historyTabs .filter-button").forEach((item) => item.classList.toggle("active", item === button));
+    $$("#historyTabs .filter-button").forEach((item) => {
+      const active = item === button;
+      item.classList.toggle("active", active);
+      item.setAttribute("aria-pressed", String(active));
+    });
     renderJobs({ force: true });
   });
   $("#downloadSearchInput").addEventListener("input", (event) => {
     state.query = event.target.value.trim().toLowerCase();
     renderJobs({ force: true });
+  });
+  $("#searchAllDownloads").addEventListener("click", () => {
+    state.filter = "all";
+    $$("#historyTabs .filter-button").forEach((item) => {
+      const active = item.dataset.filter === "all";
+      item.classList.toggle("active", active);
+      item.setAttribute("aria-pressed", String(active));
+    });
+    renderJobs({ force: true });
+    $("#downloadSearchInput").focus();
   });
   document.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -98,6 +152,8 @@ function bindInteractions() {
     if (event.key === "Escape") {
       if ($("#downloadDialog").open) closeDialog($("#downloadDialog"));
       if ($("#torrentDialog").open) closeDialog($("#torrentDialog"));
+      if ($("#batchDialog").open) closeDialog($("#batchDialog"));
+      if ($("#confirmDialog").open) resolveConfirm(false);
     }
   });
 
@@ -107,8 +163,14 @@ function bindInteractions() {
   $("#themeToggle").addEventListener("click", toggleTheme);
 
   $("#torrentSearchForm").addEventListener("submit", searchTorrents);
+  ["torrentProviderInput", "torrentCategoryInput", "torrentSortInput", "torrentOrderInput"].forEach((id) => {
+    $(`#${id}`).addEventListener("change", autoApplyTorrentSearch);
+  });
+  $("#torrentFirstButton").addEventListener("click", () => loadTorrentPage(1));
   $("#torrentPreviousButton").addEventListener("click", () => loadTorrentPage(state.torrentPage - 1));
   $("#torrentNextButton").addEventListener("click", () => loadTorrentPage(state.torrentPage + 1));
+  $("#torrentLastButton").addEventListener("click", () => loadTorrentPage(torrentLastPage()));
+  $("#torrentPageInput").addEventListener("change", () => loadTorrentPage(Number($("#torrentPageInput").value || 1)));
   $("#torrentFileInput").addEventListener("change", inspectUploadedTorrent);
   $("#torrentResults").addEventListener("click", handleTorrentResult);
   $("#selectAllTorrentFiles").addEventListener("click", selectAllTorrentFiles);
@@ -123,6 +185,11 @@ function bindInteractions() {
   $("#batchToggleVisible").addEventListener("change", toggleVisibleBatchItems);
   $("#batchItemList").addEventListener("change", handleBatchItemSelection);
   $("#startBatchButton").addEventListener("click", startSelectedBatch);
+  $$(".settings-nav-button").forEach((button) => {
+    button.addEventListener("click", () => setActiveSettingsSection(button.dataset.settingsSection));
+  });
+  $("#dependencyTestButton").addEventListener("click", loadDependencyHealth);
+  $("#dependencyInstallButton").addEventListener("click", installMissingTools);
 }
 
 function connectJobEvents() {
@@ -152,6 +219,8 @@ function startFallbackPolling() {
 
 function switchTab(tab) {
   state.activeTab = tab;
+  document.body.classList.toggle("torrent-tab-active", tab === "torrents");
+  document.body.classList.toggle("settings-tab-active", tab === "settings");
   $$(".primary-tab").forEach((button) => {
     const selected = button.dataset.tab === tab;
     button.classList.toggle("active", selected);
@@ -167,24 +236,79 @@ function switchTab(tab) {
     panel.classList.toggle("active", key === tab);
   });
   if (tab === "torrents") window.setTimeout(() => $("#torrentSearchInput").focus(), 180);
+  if (tab === "settings") window.setTimeout(() => setActiveSettingsSection(activeSettingsSection()), 120);
+}
+
+function setActiveSettingsSection(sectionId) {
+  if (!sectionId) return;
+  $$(".settings-nav-button").forEach((button) => {
+    const active = button.dataset.settingsSection === sectionId;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "true");
+    else button.removeAttribute("aria-current");
+  });
+  $$("[data-settings-section-panel]").forEach((panel) => {
+    const active = panel.dataset.settingsSectionPanel === sectionId;
+    panel.hidden = !active;
+    panel.classList.toggle("active", active);
+  });
+}
+
+function activeSettingsSection() {
+  return $(".settings-nav-button.active")?.dataset.settingsSection || "settingsGeneral";
 }
 
 function openDownloadDialog() {
   resetDownloadOptions();
-  $("#downloadDialog").showModal();
+  updateDownloadValidation();
+  openDialog($("#downloadDialog"));
   window.setTimeout(() => $("#urlInput").focus(), 100);
 }
 
+function openDialog(dialog) {
+  dialog.inert = false;
+  dialog.showModal();
+}
+
 function closeDialog(dialog) {
+  if (!dialog?.open) return;
+  if (dialog.classList.contains("closing")) return;
   dialog.classList.add("closing");
   window.setTimeout(() => {
     dialog.classList.remove("closing");
     if (dialog.open) dialog.close();
-  }, 120);
+  }, 190);
 }
 
 function closeOnBackdrop(event) {
-  if (event.target === event.currentTarget) closeDialog(event.currentTarget);
+  if (event.target !== event.currentTarget) return;
+  if (event.currentTarget.id === "confirmDialog") {
+    resolveConfirm(false);
+    return;
+  }
+  closeDialog(event.currentTarget);
+}
+
+function trapDialogFocus(event) {
+  if (event.key !== "Tab") return;
+  const dialog = event.currentTarget;
+  const focusable = $$(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+    dialog
+  ).filter((element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  });
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function updateContextOptions() {
@@ -204,11 +328,38 @@ function updateContextOptions() {
   scheduleExtractorProbe();
 }
 
+function parseDownloadUrls() {
+  return $("#urlInput").value.split(/\n+/).map((value) => value.trim()).filter(Boolean);
+}
+
+function isPotentialDownloadSource(value) {
+  return /^(https?:\/\/|magnet:)/i.test(value);
+}
+
+function updateDownloadValidation({ show = false } = {}) {
+  const urls = parseDownloadUrls();
+  const invalid = urls.filter((url) => !isPotentialDownloadSource(url));
+  const error = $("#urlInputError");
+  const input = $("#urlInput");
+  const start = $("#startButton");
+  let message = "";
+  if (!urls.length) {
+    message = show ? "Paste at least one URL, magnet link, or torrent URL before starting." : "";
+  } else if (invalid.length) {
+    message = `Check ${invalid.length} item${invalid.length === 1 ? "" : "s"}: links must start with http://, https://, or magnet:.`;
+  }
+  error.textContent = message;
+  input.setAttribute("aria-invalid", String(Boolean(message)));
+  input.closest(".field")?.classList.toggle("field-invalid", Boolean(message));
+  start.disabled = !urls.length || Boolean(invalid.length);
+  return !message && urls.length > 0;
+}
+
 function scheduleExtractorProbe() {
   window.clearTimeout(state.probeTimer);
   const sequence = ++state.probeSequence;
   const probe = $("#extractorProbe");
-  const urls = $("#urlInput").value.split(/\n+/).map((value) => value.trim()).filter(Boolean);
+  const urls = parseDownloadUrls();
   if (!["auto", "youtube", "audio"].includes(state.mode) || urls.length !== 1 || !/^https?:\/\//i.test(urls[0])) {
     probe.className = "extractor-probe";
     probe.textContent = "";
@@ -262,6 +413,7 @@ function resetDownloadOptions() {
   $("#convertPdfInput").checked = Boolean(state.settings.manga_auto_convert_pdf);
   $("#playlistInput").checked = false;
   updateContextOptions();
+  updateDownloadValidation();
 }
 
 async function api(path, options = {}) {
@@ -276,8 +428,11 @@ async function api(path, options = {}) {
 
 async function startDownload(event) {
   event.preventDefault();
-  const urls = $("#urlInput").value.split(/\n+/).map((value) => value.trim()).filter(Boolean);
-  if (!urls.length) return;
+  if (!updateDownloadValidation({ show: true })) {
+    $("#urlInput").focus();
+    return;
+  }
+  const urls = parseDownloadUrls();
   const button = $("#startButton");
   let playlist = $("#playlistInput").checked;
   setButtonLoading(button, true, $("#playlistInput").checked ? "Inspecting…" : "Starting…");
@@ -343,7 +498,7 @@ async function inspectBatch(request) {
   $("#batchContinueInput").checked = true;
   renderBatchItems();
   closeDialog($("#downloadDialog"));
-  window.setTimeout(() => $("#batchDialog").showModal(), 140);
+  window.setTimeout(() => openDialog($("#batchDialog")), 140);
 }
 
 function renderBatchItems() {
@@ -459,9 +614,9 @@ async function startSelectedBatch() {
   }
 }
 
-function setButtonLoading(button, loading, text) {
+function setButtonLoading(button, loading, text, icon = "download") {
   button.disabled = loading;
-  button.innerHTML = `<i class="ti ti-${loading ? "loader-2 loading-icon" : "download"}"></i><span>${text}</span>`;
+  button.innerHTML = `<i class="ti ti-${loading ? "loader-2 loading-icon" : icon}"></i><span>${text}</span>`;
 }
 
 async function refreshJobs() {
@@ -496,6 +651,7 @@ function renderJobs({ force = false } = {}) {
     : `${state.filter[0].toUpperCase()}${state.filter.slice(1)} downloads`;
 
   const jobs = getVisibleJobs();
+  updateDownloadSearchNotice(jobs);
   const signature = jobs.map((job) => `${job.id}:${job.status}`).join("|");
   const canPatch = !force
     && signature === state.renderedJobSignature
@@ -514,13 +670,31 @@ function renderJobs({ force = false } = {}) {
   $("#recentCount").textContent = `Showing ${jobs.length} of ${state.jobs.length} download${state.jobs.length === 1 ? "" : "s"}`;
 }
 
-function getVisibleJobs() {
+function updateDownloadSearchNotice(visibleJobs) {
+  const notice = $("#downloadSearchNotice");
+  const noticeText = $("#downloadSearchNoticeText");
+  if (!state.query || state.filter === "all" || visibleJobs.length) {
+    notice.hidden = true;
+    noticeText.textContent = "";
+    return;
+  }
+  const allMatches = getVisibleJobs({ filter: "all" }).length;
+  if (!allMatches) {
+    notice.hidden = true;
+    noticeText.textContent = "";
+    return;
+  }
+  notice.hidden = false;
+  noticeText.textContent = `${allMatches} matching download${allMatches === 1 ? "" : "s"} exist outside the ${state.filter} filter.`;
+}
+
+function getVisibleJobs({ filter = state.filter, query = state.query } = {}) {
   return state.jobs.filter((job) => {
-    const statusMatch = state.filter === "all"
-      || (state.filter === "active" && !terminalStatuses.has(job.status))
-      || job.status === state.filter;
+    const statusMatch = filter === "all"
+      || (filter === "active" && !terminalStatuses.has(job.status))
+      || job.status === filter;
     const haystack = `${job.title} ${job.request?.url || ""} ${job.provider} ${job.error || ""}`.toLowerCase();
-    return statusMatch && (!state.query || haystack.includes(state.query));
+    return statusMatch && (!query || haystack.includes(query));
   });
 }
 
@@ -578,7 +752,7 @@ function downloadRow(job, index) {
     ? `${formatBytes(job.downloaded_bytes)} / ${job.total_bytes ? formatBytes(job.total_bytes) : "—"} · ${formatBytes(job.speed_bytes)}/s`
     : sourceLabel(job);
   return `<article class="download-row${expanded ? " expanded" : ""}" data-id="${escapeHtml(job.id)}" style="animation-delay:${Math.min(index * 24, 180)}ms">
-    <button class="download-summary" type="button" data-expand="${escapeHtml(job.id)}" aria-expanded="${expanded}">
+    <button class="download-summary" type="button" data-expand="${escapeHtml(job.id)}" aria-expanded="${expanded}" aria-label="Toggle details for ${escapeHtml(job.title)}">
       <span class="download-identity">
         <span class="source-icon ${iconClass}"><i class="${icon}"></i></span>
         <span class="download-copy">
@@ -650,10 +824,14 @@ function finishedJobDetails(job) {
   const message = job.output_path || job.error || "No additional details.";
   const canResumeBatch = job.metadata?.batch
     && (job.metadata?.items || []).some((item) => !["completed", "skipped"].includes(item.status));
+  const outputActions = job.output_path ? `
+      <button class="job-action" type="button" data-copy-path="${escapeHtml(job.output_path)}"><i class="ti ti-copy"></i>Copy path</button>
+      <button class="job-action" type="button" data-open-path="${escapeHtml(job.output_path)}"><i class="ti ti-folder-open"></i>Open folder</button>` : "";
   return `<div class="progress-meta">
     <span class="status ${escapeHtml(job.status)}">${escapeHtml(job.status)}</span>
     <span class="${job.status === "failed" ? "error-detail" : ""}">${escapeHtml(message)}</span>
     <span class="progress-actions">
+      ${outputActions}
       ${canResumeBatch ? `<button class="job-action resume-batch-button" type="button" data-id="${job.id}"><i class="ti ti-player-play"></i>Resume remaining</button>` : ""}
       ${job.metadata?.failed_count ? `<button class="job-action retry-failed-button" type="button" data-id="${job.id}"><i class="ti ti-refresh"></i>Retry ${job.metadata.failed_count} failed</button>` : ""}
       ${job.provider === "gallery" && job.metadata?.folder ? `<button class="job-action pdf-button" type="button" data-folder="${escapeHtml(job.metadata.folder)}"><i class="ti ti-file-type-pdf"></i>Create PDF</button>` : ""}
@@ -667,6 +845,18 @@ function handleDownloadListClick(event) {
   if (action) {
     event.stopPropagation();
     controlJob(action.dataset.id, action.dataset.action);
+    return;
+  }
+  const copyPathButton = event.target.closest("[data-copy-path]");
+  if (copyPathButton) {
+    event.stopPropagation();
+    copyPath(copyPathButton.dataset.copyPath);
+    return;
+  }
+  const openPathButton = event.target.closest("[data-open-path]");
+  if (openPathButton) {
+    event.stopPropagation();
+    openPath(openPathButton.dataset.openPath);
     return;
   }
   const pdf = event.target.closest(".pdf-button");
@@ -697,6 +887,17 @@ function handleDownloadListClick(event) {
 }
 
 async function controlJob(id, action) {
+  if (["cancel", "skip"].includes(action)) {
+    const confirmed = await confirmAction({
+      title: action === "skip" ? "Skip current item?" : "Cancel download?",
+      message: action === "skip"
+        ? "The current batch item will be skipped and the queue will continue."
+        : "This will stop the current download or remaining batch items.",
+      confirmLabel: action === "skip" ? "Skip item" : "Cancel download",
+      danger: action === "cancel",
+    });
+    if (!confirmed) return;
+  }
   try {
     await api(`/api/downloads/${id}/${action}`, { method: "POST" });
     const labels = {
@@ -707,6 +908,27 @@ async function controlJob(id, action) {
     };
     toast(labels[action] || `Download ${action}d`);
     await refreshJobs();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function copyPath(path) {
+  try {
+    await navigator.clipboard.writeText(path);
+    toast("Output path copied");
+  } catch (error) {
+    toast("Could not copy path", true);
+  }
+}
+
+async function openPath(path) {
+  try {
+    await api("/api/open-path", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    });
+    toast("Opened output folder");
   } catch (error) {
     toast(error.message, true);
   }
@@ -801,7 +1023,15 @@ function fallbackBatchThumbnail(image) {
 }
 
 async function clearFinished() {
-  if (!state.jobs.some((job) => terminalStatuses.has(job.status))) return toast("No finished downloads to clear");
+  const finishedCount = state.jobs.filter((job) => terminalStatuses.has(job.status)).length;
+  if (!finishedCount) return toast("No finished downloads to clear");
+  const confirmed = await confirmAction({
+    title: "Clear finished downloads?",
+    message: `This removes ${finishedCount} finished item${finishedCount === 1 ? "" : "s"} from the history list. Files on disk are not deleted.`,
+    confirmLabel: "Clear history",
+    danger: true,
+  });
+  if (!confirmed) return;
   try {
     const result = await api("/api/downloads/finished", { method: "DELETE" });
     toast(`${result.removed} finished download${result.removed === 1 ? "" : "s"} cleared`);
@@ -816,6 +1046,16 @@ async function searchTorrents(event) {
   await loadTorrentPage(1);
 }
 
+async function autoApplyTorrentSearch() {
+  const query = $("#torrentSearchInput").value.trim();
+  if (!query || !state.torrentTotal) {
+    $("#torrentSortStatus").textContent = query ? "Sorting will apply when you search." : "";
+    return;
+  }
+  $("#torrentSortStatus").textContent = "Updating results…";
+  await loadTorrentPage(1);
+}
+
 async function loadTorrentPage(page) {
   const query = $("#torrentSearchInput").value.trim();
   if (!query) return toast("Enter a torrent search query", true);
@@ -823,14 +1063,16 @@ async function loadTorrentPage(page) {
   const category = $("#torrentCategoryInput").value;
   const sort = $("#torrentSortInput").value;
   const order = $("#torrentOrderInput").value;
-  page = Math.max(1, Number(page || 1));
+  page = Math.max(1, Math.min(torrentLastPage(), Number(page || 1)));
+  state.torrentLastQuery = query;
   $("#torrentResults").innerHTML = loadingState("Searching indexes…");
   $("#torrentPagination").hidden = true;
+  $("#torrentSortStatus").textContent = "Searching indexes…";
   try {
     const data = await api(
       `/api/torrents/search?q=${encodeURIComponent(query)}`
       + `&provider=${provider}&category=${category}&page=${page}`
-      + `&page_size=20&sort=${sort}&order=${order}`
+      + `&page_size=${state.torrentPageSize}&sort=${sort}&order=${order}`
     );
     state.torrentResults = data.results;
     state.torrentPage = data.page;
@@ -838,8 +1080,10 @@ async function loadTorrentPage(page) {
     state.torrentHasPrevious = data.has_previous;
     state.torrentHasNext = data.has_next;
     renderTorrentResults(provider);
+    $("#torrentSortStatus").textContent = `Showing ${data.sort || sort} ${data.order === "asc" ? "low to high" : "high to low"}.`;
   } catch (error) {
     $("#torrentResults").innerHTML = emptyState("Search unavailable", error.message);
+    $("#torrentSortStatus").textContent = "";
     toast(error.message, true);
   }
 }
@@ -848,13 +1092,22 @@ function renderTorrentResults(provider) {
   $("#torrentResults").innerHTML = state.torrentResults.length
     ? state.torrentResults.map((item, index) => torrentResultRow(item, provider, index)).join("")
     : emptyState("No torrent results", "Try another query, category, or indexer.");
-  $("#torrentPagination").hidden = state.torrentTotal <= 20;
+  const lastPage = torrentLastPage();
+  $("#torrentPagination").hidden = state.torrentTotal <= state.torrentPageSize;
+  $("#torrentFirstButton").disabled = !state.torrentHasPrevious;
   $("#torrentPreviousButton").disabled = !state.torrentHasPrevious;
   $("#torrentNextButton").disabled = !state.torrentHasNext;
-  const first = state.torrentTotal ? (state.torrentPage - 1) * 20 + 1 : 0;
-  const last = Math.min(state.torrentPage * 20, state.torrentTotal);
+  $("#torrentLastButton").disabled = !state.torrentHasNext;
+  $("#torrentPageInput").max = lastPage;
+  $("#torrentPageInput").value = state.torrentPage;
+  const first = state.torrentTotal ? (state.torrentPage - 1) * state.torrentPageSize + 1 : 0;
+  const last = Math.min(state.torrentPage * state.torrentPageSize, state.torrentTotal);
   $("#torrentPageSummary").textContent = `${first}–${last} of ${state.torrentTotal} · Page ${state.torrentPage}`;
   $("#torrentResults").scrollTop = 0;
+}
+
+function torrentLastPage() {
+  return Math.max(1, Math.ceil((state.torrentTotal || state.torrentPageSize) / state.torrentPageSize));
 }
 
 function torrentResultRow(item, provider, index) {
@@ -864,7 +1117,7 @@ function torrentResultRow(item, provider, index) {
     <small class="seed-count">${Number(item.seeders || 0)}</small>
     <small>${escapeHtml(formatTorrentDate(item.published_at))}</small>
     <small>${escapeHtml(item.indexer || provider)}</small>
-    <button class="button button-outline torrent-result-button" type="button" data-provider="${escapeHtml(provider)}" data-source="${escapeHtml(item.source_url)}">Download</button>
+    <button class="button button-outline torrent-result-button" type="button" data-provider="${escapeHtml(provider)}" data-source="${escapeHtml(item.source_url)}" data-title="${escapeHtml(item.title)}">Download</button>
   </div>`;
 }
 
@@ -888,6 +1141,12 @@ async function handleTorrentResult(event) {
       })).source;
     }
     if (source.startsWith("magnet:")) {
+      const confirmed = await confirmAction({
+        title: "Queue torrent?",
+        message: `Start downloading "${button.dataset.title || "this torrent"}"?`,
+        confirmLabel: "Queue torrent",
+      });
+      if (!confirmed) return;
       await startRequests([{ url: source, type: "torrent", quality: "best", audio_format: "mp3" }]);
       toast("Torrent queued");
       switchTab("downloads");
@@ -937,7 +1196,27 @@ function openTorrentDialog(data) {
       <strong>${escapeHtml(file.path)}</strong>
     </label>`).join("");
   updateTorrentSelectionSummary();
-  $("#torrentDialog").showModal();
+  openDialog($("#torrentDialog"));
+}
+
+function confirmAction({ title = "Confirm action", message = "Are you sure?", confirmLabel = "Confirm", danger = false } = {}) {
+  return new Promise((resolve) => {
+    state.confirmResolve = resolve;
+    $("#confirmDialogTitle").textContent = title;
+    $("#confirmDialogMessage").textContent = message;
+    const button = $("#confirmActionButton");
+    button.textContent = confirmLabel;
+    button.classList.toggle("button-danger", danger);
+    openDialog($("#confirmDialog"));
+    window.setTimeout(() => button.focus(), 80);
+  });
+}
+
+function resolveConfirm(value) {
+  const resolver = state.confirmResolve;
+  state.confirmResolve = null;
+  closeDialog($("#confirmDialog"));
+  if (resolver) resolver(Boolean(value));
 }
 
 function updateTorrentSelectionSummary() {
@@ -1022,8 +1301,100 @@ async function saveSettings(event) {
   try {
     state.settings = await api("/api/settings", { method: "POST", body: JSON.stringify(payload) });
     toast("Settings saved");
+    await loadDependencyHealth();
   } catch (error) {
     toast(error.message, true);
+  }
+}
+
+async function loadDependencyHealth() {
+  const button = $("#dependencyTestButton");
+  const installButton = $("#dependencyInstallButton");
+  const summary = $("#dependencyHealthSummary");
+  const grid = $("#dependencyGrid");
+  if (!button || !summary || !grid) return;
+  setButtonLoading(button, true, "Testing…", "stethoscope");
+  try {
+    const health = await api("/api/health");
+    const entries = Object.entries(health.dependencies || {});
+    const missing = entries.filter(([, ok]) => !ok).map(([name]) => name);
+    summary.textContent = missing.length
+      ? `${missing.length} missing: ${missing.join(", ")}`
+      : "All required tools are ready.";
+    if (installButton) {
+      installButton.title = missing.length
+        ? `Download and configure ${missing.join(", ")}`
+        : "All tools are already available.";
+      installButton.disabled = missing.length === 0;
+      installButton.setAttribute("aria-disabled", String(missing.length === 0));
+      installButton.dataset.missingCount = String(missing.length);
+    }
+    const summaryChip = $("#settingsToolSummary");
+    if (summaryChip) summaryChip.textContent = missing.length ? `${entries.length - missing.length}/${entries.length} ready` : `${entries.length}/${entries.length} ready`;
+    grid.innerHTML = entries.map(([name, ok]) => `
+      <span class="dependency-pill ${ok ? "ready" : "missing"}">
+        <i class="ti ti-${ok ? "circle-check" : "alert-triangle"}" aria-hidden="true"></i>
+        <strong>${escapeHtml(name)}</strong>
+        <small>${ok ? "Ready" : "Missing"}</small>
+      </span>`).join("");
+  } catch (error) {
+    summary.textContent = "Could not check tool health.";
+    const summaryChip = $("#settingsToolSummary");
+    if (summaryChip) summaryChip.textContent = "Check failed";
+    if (installButton) {
+      installButton.disabled = false;
+      installButton.setAttribute("aria-disabled", "false");
+      installButton.dataset.missingCount = "";
+      installButton.title = "Could not verify dependencies. Try downloading missing tools.";
+    }
+    grid.innerHTML = `<span class="dependency-pill missing"><i class="ti ti-alert-triangle"></i><strong>Health check</strong><small>${escapeHtml(error.message)}</small></span>`;
+  } finally {
+    setButtonLoading(button, false, "Test tools", "stethoscope");
+  }
+}
+
+async function installMissingTools() {
+  const button = $("#dependencyInstallButton");
+  const testButton = $("#dependencyTestButton");
+  const summary = $("#dependencyHealthSummary");
+  if (!button) return;
+  if (button.disabled && button.dataset.missingCount === "0") return;
+  let refreshHealth = false;
+  setButtonLoading(button, true, "Downloading…", "download");
+  if (testButton) testButton.disabled = true;
+  if (summary) summary.textContent = "Downloading and configuring missing tools…";
+  try {
+    const result = await api("/api/tools/install-missing", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    if (result.settings) state.settings = result.settings;
+    const installed = result.installed || [];
+    const failed = result.failed || [];
+    if (failed.length) {
+      toast(`${failed.length} tool${failed.length === 1 ? "" : "s"} could not be installed. Open Tools for details.`, true);
+      const grid = $("#dependencyGrid");
+      if (grid) {
+        grid.innerHTML = failed.map((item) => `
+          <span class="dependency-pill missing">
+            <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+            <strong>${escapeHtml(item.name)}</strong>
+            <small>${escapeHtml(item.message || "Install failed")}</small>
+          </span>`).join("");
+      }
+    } else if (installed.length) {
+      toast(`Installed ${installed.join(", ")}`);
+    } else {
+      toast("All tools are already ready.");
+    }
+    refreshHealth = true;
+  } catch (error) {
+    toast(error.message, true);
+    if (summary) summary.textContent = "Tool download failed.";
+  } finally {
+    setButtonLoading(button, false, "Download missing tools", "download");
+    if (testButton) testButton.disabled = false;
+    if (refreshHealth) await loadDependencyHealth();
   }
 }
 

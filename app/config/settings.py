@@ -2,12 +2,20 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from threading import RLock
 from typing import Any
 
 from dotenv import load_dotenv
+
+from app.utils.runtime import (
+    apply_managed_tool_path,
+    bundled_binary,
+    bundled_tool,
+    managed_binary,
+)
 
 
 def _bool(value: str | bool | None, default: bool) -> bool:
@@ -47,6 +55,15 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         load_dotenv()
+        apply_managed_tool_path()
+        bundled_aria2 = bundled_binary("aria2c.exe") or bundled_binary("aria2c")
+        bundled_ffmpeg = bundled_binary("ffmpeg.exe") or bundled_binary("ffmpeg")
+        bundled_deno = bundled_binary("deno.exe") or bundled_binary("deno")
+        managed_aria2 = managed_binary("aria2c")
+        managed_ytdlp = managed_binary("yt-dlp")
+        managed_ffmpeg = managed_binary("ffmpeg")
+        managed_spotdl = managed_binary("spotdl")
+        managed_deno = managed_binary("deno")
         return cls(
             download_dir=os.getenv("DOWNLOAD_DIR", "Download"),
             web_host=os.getenv("WEB_HOST", "127.0.0.1"),
@@ -60,14 +77,14 @@ class Settings:
             manga_remove_images_after_pdf=_bool(
                 os.getenv("MANGA_REMOVE_IMAGES_AFTER_PDF"), False
             ),
-            aria2_bin=os.getenv("ARIA2_BIN", "aria2c"),
+            aria2_bin=os.getenv("ARIA2_BIN") or managed_aria2 or bundled_aria2 or "aria2c",
             aria2_rpc_host=os.getenv("ARIA2_RPC_HOST", "127.0.0.1"),
             aria2_rpc_port=int(os.getenv("ARIA2_RPC_PORT", "6800")),
             aria2_rpc_secret=os.getenv("ARIA2_RPC_SECRET", ""),
-            ytdlp_bin=os.getenv("YTDLP_BIN", "yt-dlp"),
-            ffmpeg_bin=os.getenv("FFMPEG_BIN", "ffmpeg"),
-            spotdl_bin=os.getenv("SPOTDL_BIN", "spotdl"),
-            deno_bin=os.getenv("DENO_BIN", ""),
+            ytdlp_bin=os.getenv("YTDLP_BIN") or managed_ytdlp or bundled_tool("yt-dlp") or "yt-dlp",
+            ffmpeg_bin=os.getenv("FFMPEG_BIN") or managed_ffmpeg or bundled_ffmpeg or "ffmpeg",
+            spotdl_bin=os.getenv("SPOTDL_BIN") or managed_spotdl or bundled_tool("spotdl") or "spotdl",
+            deno_bin=os.getenv("DENO_BIN") or managed_deno or bundled_deno or shutil.which("deno") or "",
             tpb_api_url=os.getenv("TPB_API_URL", "https://apibay.org"),
             rarbg_base_url=os.getenv("RARBG_BASE_URL", "https://rargb.to"),
             prowlarr_url=os.getenv("PROWLARR_URL", "http://127.0.0.1:9696"),
@@ -98,6 +115,10 @@ class Settings:
                 "prowlarr_url",
                 "prowlarr_api_key",
                 "prowlarr_search_limit",
+                "aria2_bin",
+                "ytdlp_bin",
+                "ffmpeg_bin",
+                "spotdl_bin",
                 "deno_bin",
             }
         }

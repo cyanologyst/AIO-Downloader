@@ -7,9 +7,12 @@ venv/
 config/settings.json
 config/jobs.json
 config/batches/
+config/webview/
 Download/
 logs/
+build/
 dist/
+tools/
 design/
 design-qa.md
 *.session

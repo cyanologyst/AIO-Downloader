@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AIO Downloader</title>
   <meta name="description" content="A focused standalone workspace for authorized downloads.">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -13,6 +14,20 @@
 </head>
 <body>
   <div class="app-shell">
+    <div class="desktop-titlebar" aria-label="Window controls">
+      <div class="desktop-drag-region pywebview-drag-region">
+        <span class="desktop-app-dot" aria-hidden="true"></span>
+        <span class="desktop-window-title">AIO Downloader</span>
+      </div>
+      <div class="desktop-window-controls">
+        <button class="desktop-window-button" id="desktopMinimizeButton" type="button" aria-label="Minimize window" title="Minimize">
+          <i class="ti ti-minus" aria-hidden="true"></i>
+        </button>
+        <button class="desktop-window-button desktop-window-close" id="desktopCloseButton" type="button" aria-label="Close window" title="Close">
+          <i class="ti ti-x" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
     <header class="app-header">
       <a class="brand" href="#" data-tab-target="downloads" aria-label="AIO Downloader">
         <span>AIO</span> Downloader
@@ -61,6 +76,10 @@
           <div class="list-heading">
             <span id="downloadsHeading">All downloads</span>
             <span id="overallSpeed">0 B/s</span>
+          </div>
+          <div class="filter-notice" id="downloadSearchNotice" hidden>
+            <span id="downloadSearchNoticeText"></span>
+            <button class="text-button" id="searchAllDownloads" type="button">Search all downloads</button>
           </div>
           <div class="download-list" id="downloadList"></div>
           <div class="list-footer" id="recentCount">0 downloads</div>
@@ -128,6 +147,7 @@
             <i class="ti ti-search" aria-hidden="true"></i>
             <span>Search</span>
           </button>
+          <p class="torrent-sort-status" id="torrentSortStatus" aria-live="polite"></p>
         </form>
 
         <div class="torrent-results-header">
@@ -135,111 +155,178 @@
         </div>
         <div id="torrentResults" class="torrent-results"></div>
         <div id="torrentPagination" class="torrent-pagination" hidden>
+          <button id="torrentFirstButton" class="button button-outline" type="button"><i class="ti ti-chevrons-left" aria-hidden="true"></i>First</button>
           <button id="torrentPreviousButton" class="button button-outline" type="button"><i class="ti ti-chevron-left"></i>Previous</button>
           <span id="torrentPageSummary">Page 1</span>
+          <label class="torrent-page-jump" for="torrentPageInput">Page
+            <input id="torrentPageInput" type="number" min="1" value="1">
+          </label>
           <button id="torrentNextButton" class="button button-outline" type="button">Next<i class="ti ti-chevron-right"></i></button>
+          <button id="torrentLastButton" class="button button-outline" type="button">Last<i class="ti ti-chevrons-right" aria-hidden="true"></i></button>
         </div>
       </section>
 
       <section class="tab-panel" id="settingsPanel" role="tabpanel" hidden>
-        <div class="page-heading">
+        <div class="page-heading settings-heading">
           <div>
             <h1>Settings</h1>
             <p>Defaults and integrations for the local downloader.</p>
           </div>
-          <button class="button button-primary" type="submit" form="settingsForm" aria-label="Save settings">
+          <button class="button button-primary settings-save-button" type="submit" form="settingsForm" aria-label="Save settings">
             <i class="ti ti-device-floppy" aria-hidden="true"></i>
             <span>Save changes</span>
           </button>
         </div>
 
-        <form id="settingsForm" class="settings-layout">
-          <section class="settings-section">
-            <div class="settings-section-title">
-              <h2>General</h2>
-              <p>Storage and queue behavior.</p>
-            </div>
-            <div class="settings-fields">
-              <label class="field field-wide">Download directory
-                <div class="input-icon-end"><input name="download_dir" type="text"><i class="ti ti-folder"></i></div>
-              </label>
-              <label class="field">Max concurrent downloads
-                <input name="max_concurrent_downloads" type="number" min="1" max="16">
-              </label>
-              <label class="field">Default video quality
-                <select name="default_video_quality">
-                  <option value="best">Best available</option>
-                  <option value="1080p">1080p</option>
-                  <option value="720p">720p</option>
-                  <option value="480p">480p</option>
-                </select>
-              </label>
-              <label class="field">Default audio format
-                <select name="default_audio_format">
-                  <option value="mp3">MP3</option>
-                  <option value="m4a">M4A</option>
-                  <option value="opus">Opus</option>
-                </select>
-              </label>
-              <label class="switch-field">
-                <span><strong>Auto-convert manga to PDF</strong><small>Create a PDF when a gallery finishes.</small></span>
-                <input name="manga_auto_convert_pdf" type="checkbox"><span class="switch"></span>
-              </label>
-              <label class="switch-field">
-                <span><strong>Remove images after PDF</strong><small>Keep only the finished document.</small></span>
-                <input name="manga_remove_images_after_pdf" type="checkbox"><span class="switch"></span>
-              </label>
-            </div>
-          </section>
+        <form id="settingsForm" class="settings-workspace">
+          <aside class="settings-rail" aria-label="Settings sections">
+            <button class="settings-nav-button active" type="button" data-settings-section="settingsGeneral" aria-current="true">
+              <strong>General</strong>
+              <small>6 controls</small>
+            </button>
+            <button class="settings-nav-button" type="button" data-settings-section="settingsYtdlp">
+              <strong>yt-dlp</strong>
+              <small>3 controls</small>
+            </button>
+            <button class="settings-nav-button" type="button" data-settings-section="settingsIndexers">
+              <strong>Indexers</strong>
+              <small>5 controls</small>
+            </button>
+            <button class="settings-nav-button" type="button" data-settings-section="settingsTools">
+              <strong>Tools</strong>
+              <small>Health check</small>
+            </button>
+            <p class="settings-rail-tip">Save remains visible. Sections swap in-place without scrolling the whole page.</p>
+          </aside>
 
-          <section class="settings-section">
-            <div class="settings-section-title">
-              <h2>yt-dlp</h2>
-              <p>Authentication and network overrides.</p>
-            </div>
-            <div class="settings-fields">
-              <label class="field field-wide">Cookies file
-                <div class="input-icon-end"><input name="ytdlp_cookies_file" type="text"><i class="ti ti-file"></i></div>
-              </label>
-              <label class="field">Proxy <small>Optional</small>
-                <input name="ytdlp_proxy" type="text" placeholder="socks5://127.0.0.1:1080">
-              </label>
-              <label class="field">Deno executable <small>Hanime only</small>
-                <input name="deno_bin" type="text">
-              </label>
-            </div>
-          </section>
+          <div class="settings-detail">
+            <section class="settings-section settings-section-panel active" id="settingsGeneral" data-settings-section-panel="settingsGeneral">
+              <div class="settings-section-title">
+                <h2>General defaults</h2>
+                <p>Storage, queue behavior, and media defaults.</p>
+              </div>
+              <div class="settings-fields">
+                <label class="field field-wide" for="settingsDownloadDir">Download directory
+                  <div class="input-icon-end"><input id="settingsDownloadDir" name="download_dir" type="text"><i class="ti ti-folder"></i></div>
+                </label>
+                <label class="field" for="settingsMaxConcurrent">Max concurrent downloads
+                  <input id="settingsMaxConcurrent" name="max_concurrent_downloads" type="number" min="1" max="16">
+                </label>
+                <label class="field" for="settingsVideoQuality">Default video quality
+                  <select id="settingsVideoQuality" name="default_video_quality">
+                    <option value="best">Best available</option>
+                    <option value="1080p">1080p</option>
+                    <option value="720p">720p</option>
+                    <option value="480p">480p</option>
+                  </select>
+                </label>
+                <label class="field" for="settingsAudioFormat">Default audio format
+                  <select id="settingsAudioFormat" name="default_audio_format">
+                    <option value="mp3">MP3</option>
+                    <option value="m4a">M4A</option>
+                    <option value="opus">Opus</option>
+                  </select>
+                </label>
+                <div class="settings-summary-strip">
+                  <span><strong>yt-dlp</strong><small>Proxy and cookies</small></span>
+                  <span><strong>Indexers</strong><small>Search endpoints</small></span>
+                  <span><strong>Tools</strong><small id="settingsToolSummary">Checking…</small></span>
+                </div>
+                <div class="settings-toggle-grid field-wide" aria-label="Gallery PDF defaults">
+                  <label class="switch-field" for="settingsAutoPdf">
+                    <span><strong>Auto-convert manga to PDF</strong><small>Create a PDF when a gallery finishes.</small></span>
+                    <input id="settingsAutoPdf" name="manga_auto_convert_pdf" type="checkbox"><span class="switch"></span>
+                  </label>
+                  <label class="switch-field" for="settingsRemoveImages">
+                    <span><strong>Remove images after PDF</strong><small>Keep only the finished document.</small></span>
+                    <input id="settingsRemoveImages" name="manga_remove_images_after_pdf" type="checkbox"><span class="switch"></span>
+                  </label>
+                </div>
+              </div>
+            </section>
 
-          <section class="settings-section">
-            <div class="settings-section-title">
-              <h2>Torrent indexers</h2>
-              <p>Search endpoints and Prowlarr access.</p>
-            </div>
-            <div class="settings-fields">
-              <label class="field">TPB API URL<input name="tpb_api_url" type="text"></label>
-              <label class="field">RARBG-style base URL<input name="rarbg_base_url" type="text"></label>
-              <label class="field">Prowlarr URL<input name="prowlarr_url" type="text"></label>
-              <label class="field">Prowlarr API key<input name="prowlarr_api_key" type="password"></label>
-              <label class="field">Prowlarr result limit<input name="prowlarr_search_limit" type="number" min="1" max="100"></label>
-            </div>
-          </section>
+            <section class="settings-section settings-section-panel" id="settingsYtdlp" data-settings-section-panel="settingsYtdlp" hidden>
+              <div class="settings-section-title">
+                <h2>yt-dlp</h2>
+                <p>Authentication, network, and runtime overrides.</p>
+              </div>
+              <div class="settings-fields">
+                <label class="field field-wide" for="settingsCookiesFile">Cookies file
+                  <div class="input-icon-end"><input id="settingsCookiesFile" name="ytdlp_cookies_file" type="text"><i class="ti ti-file"></i></div>
+                </label>
+                <label class="field" for="settingsYtdlpProxy">Proxy <small>Optional</small>
+                  <input id="settingsYtdlpProxy" name="ytdlp_proxy" type="text" placeholder="socks5://127.0.0.1:1080">
+                </label>
+                <label class="field" for="settingsDenoBin">Deno executable <small>Hanime only</small>
+                  <input id="settingsDenoBin" name="deno_bin" type="text">
+                </label>
+              </div>
+            </section>
+
+            <section class="settings-section settings-section-panel" id="settingsIndexers" data-settings-section-panel="settingsIndexers" hidden>
+              <div class="settings-section-title">
+                <h2>Torrent indexers</h2>
+                <p>Search endpoints and Prowlarr access.</p>
+              </div>
+              <div class="settings-fields">
+                <label class="field" for="settingsTpbApi">TPB API URL<input id="settingsTpbApi" name="tpb_api_url" type="text"></label>
+                <label class="field" for="settingsRarbgBase">RARBG-style base URL<input id="settingsRarbgBase" name="rarbg_base_url" type="text"></label>
+                <label class="field" for="settingsProwlarrUrl">Prowlarr URL<input id="settingsProwlarrUrl" name="prowlarr_url" type="text"></label>
+                <label class="field" for="settingsProwlarrApiKey">Prowlarr API key<input id="settingsProwlarrApiKey" name="prowlarr_api_key" type="password"></label>
+                <label class="field" for="settingsProwlarrLimit">Prowlarr result limit<input id="settingsProwlarrLimit" name="prowlarr_search_limit" type="number" min="1" max="100"></label>
+              </div>
+            </section>
+
+            <section class="settings-section settings-section-panel tools-section" id="settingsTools" data-settings-section-panel="settingsTools" hidden>
+              <div class="settings-section-title">
+                <h2>Tools</h2>
+                <p>Bundled/runtime dependency readiness.</p>
+              </div>
+              <div class="settings-fields">
+                <div class="tool-health-card field-wide">
+                  <div>
+                    <strong>Dependency health</strong>
+                    <small id="dependencyHealthSummary">Not checked yet.</small>
+                  </div>
+                  <div class="tool-health-actions">
+                    <button class="button button-primary" id="dependencyInstallButton" type="button">
+                      <i class="ti ti-download" aria-hidden="true"></i>
+                      <span>Download missing tools</span>
+                    </button>
+                    <button class="button button-outline" id="dependencyTestButton" type="button">
+                      <i class="ti ti-stethoscope" aria-hidden="true"></i>
+                      <span>Test tools</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="dependency-grid field-wide" id="dependencyGrid" aria-live="polite"></div>
+              </div>
+            </section>
+          </div>
         </form>
       </section>
     </main>
   </div>
 
-  <dialog id="downloadDialog" class="dialog">
+  <dialog id="downloadDialog" class="dialog" aria-labelledby="downloadDialogTitle" aria-describedby="downloadDialogDescription">
     <form id="downloadForm" class="dialog-content">
       <div class="dialog-header">
-        <div><h2>New download</h2><p>Add one link per line for batch downloads.</p></div>
+        <div><h2 id="downloadDialogTitle">New download</h2><p id="downloadDialogDescription">Add one link per line for batch downloads.</p></div>
         <button class="icon-button dialog-close" type="button" aria-label="Close"><i class="ti ti-x"></i></button>
       </div>
 
-      <label class="field">URL, magnet link, or torrent URL
+      <div class="download-steps" aria-label="Download flow">
+        <span class="download-step active"><i class="ti ti-link" aria-hidden="true"></i>Paste</span>
+        <span class="download-step"><i class="ti ti-adjustments" aria-hidden="true"></i>Options</span>
+        <span class="download-step"><i class="ti ti-list-check" aria-hidden="true"></i>Review</span>
+      </div>
+
+      <label class="field" for="urlInput">URL, magnet link, or torrent URL
         <div class="composer-input">
           <i class="ti ti-link" aria-hidden="true"></i>
-          <textarea id="urlInput" rows="2" placeholder="Paste a link here…" required></textarea>
+          <textarea id="urlInput" rows="2" placeholder="Paste a link here…" required aria-describedby="urlInputError extractorProbe"></textarea>
         </div>
+        <span id="urlInputError" class="field-error" aria-live="polite"></span>
         <span id="extractorProbe" class="extractor-probe" aria-live="polite"></span>
       </label>
 
@@ -291,7 +378,7 @@
 
       <div class="dialog-actions">
         <button class="button button-outline dialog-close" type="button">Cancel</button>
-        <button class="button button-primary" type="submit" id="startButton">
+        <button class="button button-primary" type="submit" id="startButton" disabled>
           <i class="ti ti-download" aria-hidden="true"></i>
           <span>Start download</span>
         </button>
@@ -299,7 +386,7 @@
     </form>
   </dialog>
 
-  <dialog id="batchDialog" class="dialog batch-dialog">
+  <dialog id="batchDialog" class="dialog batch-dialog" aria-labelledby="batchDialogTitle" aria-describedby="batchDialogSubtitle">
     <div class="dialog-content batch-dialog-content">
       <div class="dialog-header">
         <div>
@@ -359,10 +446,10 @@
     </div>
   </dialog>
 
-  <dialog id="torrentDialog" class="dialog">
+  <dialog id="torrentDialog" class="dialog" aria-labelledby="torrentDialogTitle" aria-describedby="torrentDialogName">
     <div class="dialog-content torrent-dialog-content">
       <div class="dialog-header">
-        <div><h2>Select torrent files</h2><p id="torrentDialogName"></p></div>
+        <div><h2 id="torrentDialogTitle">Select torrent files</h2><p id="torrentDialogName"></p></div>
         <button class="icon-button torrent-dialog-close" type="button" aria-label="Close"><i class="ti ti-x"></i></button>
       </div>
       <div class="torrent-selection-actions">
@@ -373,6 +460,22 @@
       <div class="dialog-actions">
         <button class="button button-outline torrent-dialog-close" type="button">Cancel</button>
         <button id="downloadSelectedTorrentFiles" class="button button-primary" type="button">Download selected</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="confirmDialog" class="dialog confirm-dialog" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogMessage">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <div>
+          <h2 id="confirmDialogTitle">Confirm action</h2>
+          <p id="confirmDialogMessage">Are you sure?</p>
+        </div>
+        <button class="icon-button confirm-cancel" type="button" aria-label="Close confirmation"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="confirm-actions">
+        <button class="button button-outline confirm-cancel" type="button">Cancel</button>
+        <button id="confirmActionButton" class="button button-primary" type="button">Confirm</button>
       </div>
     </div>
   </dialog>

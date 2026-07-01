@@ -19,5 +19,5 @@ if [ "${SKIP_INSTALL:-0}" != "1" ]; then
   "$PYTHON" -m pip install -r requirements.txt
 fi
 
-echo "Starting AIO Downloader at http://127.0.0.1:5050"
-"$PYTHON" -m app.main
+echo "Starting AIO Downloader desktop app..."
+"$PYTHON" -m app.desktop

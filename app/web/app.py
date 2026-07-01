@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shutil
+import subprocess
+import sys
 from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,7 @@ from app.models import DownloadRequest
 from app.services.job_service import JobService
 from app.services.batch_manifest import BatchManifestService
 from app.services.pdf_service import convert_folder_to_pdf
+from app.services.tool_installer import install_missing_tools, tool_health
 from app.services.video_sites import SUPPORTED_VIDEO_SITES, host as video_host, matches_domain
 from app.services.torrent_search import (
     ProwlarrClient,
@@ -35,6 +37,7 @@ from app.services.torrent_search import (
     TorrentSearchError,
 )
 from app.utils.paths import safe_existing_path
+from app.utils.subprocess_utils import subprocess_window_options
 
 
 def create_app(settings_store: SettingsStore | None = None) -> Flask:
@@ -74,6 +77,21 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
     app.extensions["settings_store"] = store
     app.extensions["job_service"] = jobs
     app.extensions["batch_service"] = batches
+
+    def sync_runtime_settings() -> None:
+        current = store.get()
+        aria2.client.config.binary = current.aria2_bin
+        ytdlp.binary = current.ytdlp_bin
+        ytdlp.ffmpeg = current.ffmpeg_bin
+        ytdlp.cookies_file = current.ytdlp_cookies_file
+        ytdlp.proxy = current.ytdlp_proxy
+        ytdlp.deno_bin = current.deno_bin
+        spotify.binary = current.spotdl_bin
+        spotify.ffmpeg = current.ffmpeg_bin
+        batches.cookies_file = current.ytdlp_cookies_file
+        batches.proxy = current.ytdlp_proxy
+        batches.download_dir = current.download_path
+        gallery.remove_images_after_pdf = current.manga_remove_images_after_pdf
 
     @lru_cache(maxsize=128)
     def resolve_thumbnail(url: str, supplied_thumbnail: str = "") -> tuple[bytes, str]:
@@ -229,6 +247,21 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
     def clear_finished_downloads():
         return jsonify({"removed": jobs.clear_finished()})
 
+    @app.post("/api/open-path")
+    def open_path():
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict) or not payload.get("path"):
+            return _error("path is required", 400)
+        current = store.get()
+        try:
+            target = safe_existing_path(current.download_path, str(payload["path"]))
+            if not target.exists():
+                return _error("Path was not found", 404)
+            _open_in_file_manager(target)
+            return jsonify({"opened": str(target)})
+        except (ValueError, OSError) as exc:
+            return _error(str(exc), 400)
+
     @app.post("/api/downloads/<job_id>/pause")
     def pause_download(job_id: str):
         if not jobs.get_job(job_id):
@@ -332,14 +365,8 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
         try:
             updated = store.update(payload)
             jobs.update_limit(updated.max_concurrent_downloads)
-            ytdlp.cookies_file = updated.ytdlp_cookies_file
-            ytdlp.proxy = updated.ytdlp_proxy
-            ytdlp.deno_bin = updated.deno_bin
+            sync_runtime_settings()
             resolve_thumbnail.cache_clear()
-            batches.cookies_file = updated.ytdlp_cookies_file
-            batches.proxy = updated.ytdlp_proxy
-            batches.download_dir = updated.download_path
-            gallery.remove_images_after_pdf = updated.manga_remove_images_after_pdf
             return jsonify(updated.public_dict())
         except (ValueError, TypeError, OSError) as exc:
             return _error(str(exc), 400)
@@ -481,14 +508,7 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
     @app.get("/api/health")
     def health():
         current = store.get()
-        dependencies = {
-            "aria2c": bool(shutil.which(current.aria2_bin)),
-            "yt-dlp": bool(shutil.which(current.ytdlp_bin)),
-            "ffmpeg": bool(shutil.which(current.ffmpeg_bin)),
-            "spotdl": bool(shutil.which(current.spotdl_bin)),
-            "deno": bool(current.deno_bin and Path(current.deno_bin).exists())
-            or bool(shutil.which("deno")),
-        }
+        dependencies = tool_health(current)
         return jsonify(
             {
                 "status": "ok",
@@ -496,6 +516,28 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
                 "dependencies": dependencies,
             }
         )
+
+    @app.post("/api/tools/install-missing")
+    def install_tools():
+        payload = request.get_json(silent=True) or {}
+        tools = payload.get("tools") if isinstance(payload, dict) else None
+        try:
+            outcomes, installed_paths = install_missing_tools(store.get(), tools)
+            updated = store.update(installed_paths) if installed_paths else store.get()
+            if installed_paths:
+                sync_runtime_settings()
+            dependencies = tool_health(updated)
+            return jsonify(
+                {
+                    "outcomes": [outcome.to_dict() for outcome in outcomes],
+                    "installed": [outcome.name for outcome in outcomes if outcome.status == "installed"],
+                    "failed": [outcome.to_dict() for outcome in outcomes if outcome.status == "failed"],
+                    "dependencies": dependencies,
+                    "settings": updated.public_dict(),
+                }
+            )
+        except (ValueError, RuntimeError, OSError, subprocess.CalledProcessError) as exc:
+            return _error(str(exc), 400)
 
     @app.errorhandler(404)
     def not_found(_error):
@@ -508,6 +550,23 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
 
 def _error(message: str, status: int):
     return _error_response(message, status)
+
+
+def _open_in_file_manager(target: Path) -> None:
+    if sys.platform == "win32":
+        if target.is_file():
+            subprocess.Popen(
+                ["explorer", f"/select,{target}"],
+                **subprocess_window_options(),
+            )
+        else:
+            subprocess.Popen(["explorer", str(target)], **subprocess_window_options())
+        return
+    if sys.platform == "darwin":
+        command = ["open", "-R", str(target)] if target.is_file() else ["open", str(target)]
+    else:
+        command = ["xdg-open", str(target.parent if target.is_file() else target)]
+    subprocess.Popen(command, **subprocess_window_options())
 
 
 def _error_response(message: str, status: int):

@@ -18,6 +18,7 @@ file-manager surface.
 ## ✨ Highlights
 
 - Modern Comfortaa-based Flask dashboard with dark/light UI.
+- Desktop app window through pywebview, with rounded custom shell controls.
 - Paste-time Auto detection through yt-dlp plus dedicated fallback resolvers.
 - Batch Review modal before queuing multi-item pages.
 - Select exact batch items, search within batches, pick ranges, or start presets.
@@ -140,15 +141,17 @@ Torrent features:
 - ffmpeg
 - Deno, for Hanime support
 - Optional Prowlarr instance for multi-indexer torrent search
+- Linux desktop mode may require GTK/WebKit packages for pywebview, depending
+  on the distribution.
 
 ## 📦 Release format
 
-The first release ships as a **portable source app**:
+The first release ships as a **portable desktop source app**:
 
 - unzip the release package;
 - run the platform bootstrap script;
 - the script creates `.venv`, installs Python dependencies, copies
-  `.env.example` to `.env`, and starts the local dashboard.
+  `.env.example` to `.env`, and opens the app in a native desktop window.
 
 For Windows/macOS/Ubuntu, this is a better first release format than a single
 "portable executable" because AIO Downloader relies on platform-specific tools
@@ -171,7 +174,7 @@ python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Or use the release runner:
+Or use the release runner, which opens the desktop app window:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
@@ -201,14 +204,17 @@ chmod +x scripts/run-unix.sh
 ## ▶️ Run
 
 ```powershell
+.\.venv\Scripts\python.exe -m app.desktop
+```
+
+For development, you can still run the plain local web server:
+
+```powershell
 .\.venv\Scripts\python.exe -m app.main
 ```
 
-By default, the web UI is served at:
-
-```text
-http://127.0.0.1:5050
-```
+By default, the local server bridge uses `http://127.0.0.1:5050`, but desktop
+mode falls back to an available local port if 5050 is already occupied.
 
 ## ⚙️ Configuration
 

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from app.utils.subprocess_utils import require_executable
+from app.utils.subprocess_utils import require_executable, subprocess_window_options
 
 
 class Aria2RpcError(RuntimeError):
@@ -93,6 +93,7 @@ class Aria2RpcClient:
                 f"--save-session={session}",
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
+                **subprocess_window_options(),
             )
             for _ in range(40):
                 if await self.is_ready():

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 import shutil
+import sys
 
 
 def require_executable(name: str, friendly_name: str | None = None) -> str:
@@ -9,6 +11,18 @@ def require_executable(name: str, friendly_name: str | None = None) -> str:
     if not resolved:
         raise RuntimeError(f"{friendly_name or name} executable not found: {name}")
     return resolved
+
+
+def subprocess_window_options() -> dict[str, object]:
+    if sys.platform != "win32":
+        return {}
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return {
+        "startupinfo": startupinfo,
+        "creationflags": subprocess.CREATE_NO_WINDOW,
+    }
 
 
 async def terminate_process(process: asyncio.subprocess.Process | None) -> None:
