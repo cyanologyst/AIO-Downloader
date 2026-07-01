@@ -50,12 +50,17 @@ if (-not (Test-Path -LiteralPath $WebView2Setup)) {
 $Iscc = Find-Iscc
 $Iss = Join-Path $Root "installer\windows\AIO-Downloader.iss"
 $OutputDir = Join-Path $Root "dist"
+$IconFile = Join-Path $Root "aio_downloader_icon_windows.ico"
+if (-not (Test-Path -LiteralPath $IconFile)) {
+  throw "Windows icon was expected but not found: $IconFile"
+}
 
 & $Iscc `
   "/DMyAppVersion=$Version" `
   "/DPackageDir=$PackageDir" `
   "/DOutputDir=$OutputDir" `
   "/DWebView2Setup=$WebView2Setup" `
+  "/DIconFile=$IconFile" `
   $Iss
 
 if ($LASTEXITCODE -ne 0) {

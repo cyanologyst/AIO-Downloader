@@ -33,11 +33,17 @@ if (Test-Path -LiteralPath $ffprobe) {
 }
 Copy-Item -LiteralPath $deno -Destination (Join-Path $BundleBin "deno.exe") -Force
 
+$IconPath = Join-Path $Root "aio_downloader_icon_windows.ico"
+if (-not (Test-Path -LiteralPath $IconPath)) {
+  throw "Windows icon was expected but not found: $IconPath"
+}
+
 $PyInstallerArgs = @(
   "--noconfirm",
   "--clean",
   "--windowed",
   "--name", "AIO Downloader",
+  "--icon", $IconPath,
   "--distpath", "dist\windows",
   "--workpath", "build\pyinstaller",
   "--specpath", "build\pyinstaller",

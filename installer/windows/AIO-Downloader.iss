@@ -14,6 +14,10 @@
 #define WebView2Setup "..\..\build\installer\MicrosoftEdgeWebView2Setup.exe"
 #endif
 
+#ifndef IconFile
+#define IconFile "..\..\aio_downloader_icon_windows.ico"
+#endif
+
 [Setup]
 AppId={{4F21F5D6-3F45-4EA4-9EAF-D656E9D2A0D6}
 AppName=AIO Downloader
@@ -35,6 +39,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
 UninstallDisplayIcon={app}\AIO Downloader.exe
+SetupIconFile={#IconFile}
 SetupLogging=yes
 
 [Languages]
