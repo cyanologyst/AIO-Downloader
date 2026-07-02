@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import traceback
 
 from app.utils.runtime import app_root
 
@@ -14,11 +15,37 @@ def _run_ytdlp(args: list[str]) -> int:
 
 
 def _run_spotdl(args: list[str]) -> int:
-    from spotdl.console.entry_point import console_entry_point
+    try:
+        _patch_gettext_missing_translation_fallback()
+        from spotdl.console.entry_point import console_entry_point
 
-    sys.argv = ["spotdl", *args]
-    console_entry_point()
-    return 0
+        sys.argv = ["spotdl", *args]
+        console_entry_point()
+        return 0
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 1 if exc.code else 0
+        return code
+    except BaseException:
+        traceback.print_exc()
+        return 1
+
+
+def _patch_gettext_missing_translation_fallback() -> None:
+    import gettext
+
+    original = gettext.translation
+
+    if getattr(original, "_aio_missing_translation_fallback", False):
+        return
+
+    def translation_with_fallback(domain, localedir=None, languages=None, class_=None, fallback=False):
+        try:
+            return original(domain, localedir=localedir, languages=languages, class_=class_, fallback=fallback)
+        except FileNotFoundError:
+            return gettext.NullTranslations()
+
+    translation_with_fallback._aio_missing_translation_fallback = True
+    gettext.translation = translation_with_fallback
 
 
 def main() -> None:

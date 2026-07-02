@@ -1357,7 +1357,7 @@ function renderCookieProfiles() {
   const isChromium = ["brave", "chrome", "chromium", "edge", "opera", "vivaldi", "whale"].includes(browserInput.value);
   if (status) {
     status.textContent = isChromium
-      ? "Chromium browsers can block cookie decryption on Windows. If this fails, use Firefox or select a Netscape cookies.txt file."
+      ? "If direct Chromium export is blocked, AIO Downloader will try opening Chrome with a temporary DevTools bridge to export cookies."
       : "Choose a browser/profile, then fetch to create a local cookies file.";
     status.classList.toggle("warning", isChromium);
   }
