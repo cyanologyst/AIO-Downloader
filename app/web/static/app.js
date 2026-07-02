@@ -1332,10 +1332,10 @@ async function loadCookieBrowsers() {
     browserInput.innerHTML = state.cookieBrowsers.map((browser) => (
       `<option value="${escapeHtml(browser.id)}">${escapeHtml(browser.label)}</option>`
     )).join("");
+    const firefox = state.cookieBrowsers.find((browser) => browser.id === "firefox" && (browser.profiles || []).length);
+    if (firefox) browserInput.value = "firefox";
     renderCookieProfiles();
-    if (status) status.textContent = state.cookieBrowsers.length
-      ? "Choose a browser/profile, then fetch to create a local cookies file."
-      : "No supported browser cookie sources were detected.";
+    if (status && !state.cookieBrowsers.length) status.textContent = "No supported browser cookie sources were detected.";
   } catch (error) {
     if (status) status.textContent = `Could not inspect browser profiles: ${error.message}`;
   }
@@ -1345,6 +1345,7 @@ function renderCookieProfiles() {
   const browserInput = $("#cookieBrowserInput");
   const profileInput = $("#cookieProfileInput");
   const pathInput = $("#cookieProfilePathInput");
+  const status = $("#cookieFetchStatus");
   if (!browserInput || !profileInput) return;
   const browser = state.cookieBrowsers.find((item) => item.id === browserInput.value);
   const profiles = browser?.profiles || [];
@@ -1353,6 +1354,13 @@ function renderCookieProfiles() {
     ...profiles.map((profile) => `<option value="${escapeHtml(profile.path)}">${escapeHtml(profile.name)}</option>`),
   ].join("");
   if (pathInput) pathInput.value = "";
+  const isChromium = ["brave", "chrome", "chromium", "edge", "opera", "vivaldi", "whale"].includes(browserInput.value);
+  if (status) {
+    status.textContent = isChromium
+      ? "Chromium browsers can block cookie decryption on Windows. If this fails, use Firefox or select a Netscape cookies.txt file."
+      : "Choose a browser/profile, then fetch to create a local cookies file.";
+    status.classList.toggle("warning", isChromium);
+  }
 }
 
 async function fetchBrowserCookies() {

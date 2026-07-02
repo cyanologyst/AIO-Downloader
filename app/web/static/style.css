@@ -788,6 +788,7 @@ body.desktop-mode #torrentsPanel .torrent-results {
   grid-column: 1 / -1;
   color: var(--muted);
 }
+.cookie-fetch-status.warning { color: var(--warning); }
 .switch-field {
   position: relative;
   min-height: 76px;

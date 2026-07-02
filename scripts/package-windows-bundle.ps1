@@ -82,7 +82,7 @@ if (Test-Path -LiteralPath (Join-Path $BundleBin "ffprobe.exe")) {
 
 $PyInstallerArgs += "app\launcher.py"
 
-python -m pip install --upgrade pyinstaller
+python -m pip install --upgrade pyinstaller "yt-dlp[default]>=2026.6.9"
 if ($LASTEXITCODE -ne 0) {
   throw "pip failed with exit code $LASTEXITCODE"
 }

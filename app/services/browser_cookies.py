@@ -32,6 +32,8 @@ BROWSER_LABELS = {
     "vivaldi": "Vivaldi",
 }
 
+CHROMIUM_BROWSERS = {"brave", "chrome", "chromium", "edge", "opera", "vivaldi", "whale"}
+
 
 def supported_cookie_browsers() -> list[dict[str, object]]:
     browsers: list[dict[str, object]] = []
@@ -146,7 +148,7 @@ def _detect_profiles(browser: str) -> list[BrowserProfile]:
 def _normalize_profile_path(browser: str, profile: str) -> str:
     if not profile:
         return ""
-    if browser not in {"brave", "chrome", "chromium", "edge", "opera", "vivaldi", "whale"}:
+    if browser not in CHROMIUM_BROWSERS:
         return profile
     path = Path(profile).expanduser()
     if path.name.lower() == "cookies" and path.parent.name.lower() == "network":
@@ -156,8 +158,20 @@ def _normalize_profile_path(browser: str, profile: str) -> str:
 
 def _friendly_cookie_error(message: str, browser: str) -> str:
     compact = " ".join(message.split())
+    label = BROWSER_LABELS.get(browser, browser.title())
+    if "failed to decrypt with dpapi" in compact.lower():
+        if browser in CHROMIUM_BROWSERS:
+            return (
+                f"{label} blocked cookie decryption with Windows DPAPI. This is common with recent "
+                "Chromium-based browsers and cannot always be bypassed by external apps. "
+                "Recommended fix: sign in with Firefox and fetch Firefox cookies, or export a Netscape "
+                "cookies.txt file from your browser and select that file here."
+            )
+        return (
+            f"{label} cookies could not be decrypted with Windows DPAPI. Try fetching from another "
+            "browser profile or select a Netscape cookies.txt file manually."
+        )
     if "could not copy chrome cookie database" in compact.lower() or "permission" in compact.lower():
-        label = BROWSER_LABELS.get(browser, browser.title())
         return (
             f"{label} is locking its cookie database. Fully close {label} first "
             "(including background/tray processes), then click Fetch cookies again. "
