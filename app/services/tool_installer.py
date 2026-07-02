@@ -31,6 +31,8 @@ TOOL_SETTINGS = {
     "deno": "deno_bin",
 }
 
+UPDATABLE_TOOLS = ("aria2c", "yt-dlp", "ffmpeg", "deno")
+
 WINDOWS_DIRECT_DOWNLOADS = {
     "yt-dlp": "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe",
     "deno": "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip",

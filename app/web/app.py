@@ -27,8 +27,9 @@ from app.downloaders.ytdlp_downloader import YtdlpDownloader
 from app.models import DownloadRequest
 from app.services.job_service import JobService
 from app.services.batch_manifest import BatchManifestService
+from app.services.browser_cookies import export_browser_cookies, supported_cookie_browsers
 from app.services.pdf_service import convert_folder_to_pdf
-from app.services.tool_installer import install_missing_tools, tool_health
+from app.services.tool_installer import UPDATABLE_TOOLS, install_missing_tools, tool_health
 from app.services.video_sites import SUPPORTED_VIDEO_SITES, host as video_host, matches_domain
 from app.services.torrent_search import (
     ProwlarrClient,
@@ -517,6 +518,7 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
                 "status": "ok",
                 "download_dir": str(current.download_path),
                 "dependencies": dependencies,
+                "updatable_tools": list(UPDATABLE_TOOLS),
                 "portable_lite": is_portable_lite(),
                 "managed_tools_dir": str(managed_bin_dir()),
             }
@@ -545,6 +547,47 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
                 }
             )
         except (ValueError, RuntimeError, OSError, subprocess.CalledProcessError) as exc:
+            return _error(str(exc), 400)
+
+    @app.post("/api/tools/update")
+    def update_tools():
+        payload = request.get_json(silent=True) or {}
+        requested = payload.get("tools") if isinstance(payload, dict) else None
+        tools = list(requested or UPDATABLE_TOOLS)
+        try:
+            outcomes, installed_paths = install_missing_tools(store.get(), tools, force_tools=tools)
+            updated = store.update(installed_paths) if installed_paths else store.get()
+            if installed_paths:
+                sync_runtime_settings()
+            dependencies = tool_health(updated)
+            return jsonify(
+                {
+                    "outcomes": [outcome.to_dict() for outcome in outcomes],
+                    "updated": [outcome.name for outcome in outcomes if outcome.status == "installed"],
+                    "failed": [outcome.to_dict() for outcome in outcomes if outcome.status == "failed"],
+                    "dependencies": dependencies,
+                    "updatable_tools": list(UPDATABLE_TOOLS),
+                    "settings": updated.public_dict(),
+                }
+            )
+        except (ValueError, RuntimeError, OSError, subprocess.CalledProcessError) as exc:
+            return _error(str(exc), 400)
+
+    @app.get("/api/cookies/browsers")
+    def cookie_browsers():
+        return jsonify({"browsers": supported_cookie_browsers()})
+
+    @app.post("/api/cookies/export")
+    def export_cookies():
+        payload = request.get_json(silent=True) or {}
+        browser = str(payload.get("browser") or "")
+        profile = str(payload.get("profile") or "")
+        try:
+            result = export_browser_cookies(browser, profile)
+            updated = store.update({"ytdlp_cookies_file": str(result["path"])})
+            sync_runtime_settings()
+            return jsonify({"cookies": result, "settings": updated.public_dict()})
+        except Exception as exc:
             return _error(str(exc), 400)
 
     @app.errorhandler(404)

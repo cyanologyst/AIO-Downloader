@@ -29,10 +29,6 @@
       </div>
     </div>
     <header class="app-header">
-      <a class="brand" href="#" data-tab-target="downloads" aria-label="AIO Downloader">
-        <span>AIO</span> Downloader
-      </a>
-
       <button class="button button-primary new-download-button" id="openDownloadDialog" type="button" aria-label="New download">
         <i class="ti ti-plus" aria-hidden="true"></i>
         <span>New download</span>
@@ -186,7 +182,7 @@
             </button>
             <button class="settings-nav-button" type="button" data-settings-section="settingsYtdlp">
               <strong>yt-dlp</strong>
-              <small>3 controls</small>
+              <small>Cookies and network</small>
             </button>
             <button class="settings-nav-button" type="button" data-settings-section="settingsIndexers">
               <strong>Indexers</strong>
@@ -254,6 +250,26 @@
                 <label class="field field-wide" for="settingsCookiesFile">Cookies file
                   <div class="input-icon-end"><input id="settingsCookiesFile" name="ytdlp_cookies_file" type="text"><i class="ti ti-file"></i></div>
                 </label>
+                <div class="cookie-fetch-card field-wide">
+                  <div>
+                    <strong>Fetch browser cookies</strong>
+                    <small>Use this only for browsers/profiles you are signed into and authorized to use.</small>
+                  </div>
+                  <label class="field" for="cookieBrowserInput">Browser
+                    <select id="cookieBrowserInput"></select>
+                  </label>
+                  <label class="field" for="cookieProfileInput">Profile
+                    <select id="cookieProfileInput"></select>
+                  </label>
+                  <label class="field field-wide" for="cookieProfilePathInput">Custom profile path <small>Optional, useful when a profile is not listed.</small>
+                    <input id="cookieProfilePathInput" type="text" placeholder="Leave empty to use the selected profile">
+                  </label>
+                  <button class="button button-outline" id="cookieFetchButton" type="button">
+                    <i class="ti ti-cookie" aria-hidden="true"></i>
+                    <span>Fetch cookies from browser</span>
+                  </button>
+                  <small class="cookie-fetch-status" id="cookieFetchStatus" aria-live="polite">Choose a browser/profile, then fetch to create a local cookies file.</small>
+                </div>
                 <label class="field" for="settingsYtdlpProxy">Proxy <small>Optional</small>
                   <input id="settingsYtdlpProxy" name="ytdlp_proxy" type="text" placeholder="socks5://127.0.0.1:1080">
                 </label>
@@ -280,9 +296,14 @@
             <section class="settings-section settings-section-panel tools-section" id="settingsTools" data-settings-section-panel="settingsTools" hidden>
               <div class="settings-section-title">
                 <h2>Tools</h2>
-                <p>Bundled/runtime dependency readiness.</p>
+                <p>Check missing tools or refresh downloader runtimes.</p>
               </div>
               <div class="settings-fields">
+                <div class="mini-tabs field-wide" role="tablist" aria-label="Tool settings">
+                  <button class="mini-tab active" id="toolHealthTab" type="button" data-tool-subtab="toolHealthPanel" aria-selected="true">Health</button>
+                  <button class="mini-tab" id="toolUpdatesTab" type="button" data-tool-subtab="toolUpdatesPanel" aria-selected="false">Updates</button>
+                </div>
+                <div class="tool-subpanel field-wide active" id="toolHealthPanel">
                 <div class="tool-health-card field-wide">
                   <div>
                     <strong>Dependency health</strong>
@@ -300,6 +321,20 @@
                   </div>
                 </div>
                 <div class="dependency-grid field-wide" id="dependencyGrid" aria-live="polite"></div>
+                </div>
+                <div class="tool-subpanel field-wide" id="toolUpdatesPanel" hidden>
+                  <div class="tool-update-card">
+                    <div>
+                      <strong>Refresh downloadable tools</strong>
+                      <small>Updates yt-dlp, aria2, ffmpeg, and Deno into the managed tools folder. spotDL updates with app releases.</small>
+                    </div>
+                    <button class="button button-primary" id="toolUpdateButton" type="button">
+                      <i class="ti ti-refresh" aria-hidden="true"></i>
+                      <span>Update tools</span>
+                    </button>
+                  </div>
+                  <div class="dependency-grid" id="toolUpdateGrid" aria-live="polite"></div>
+                </div>
               </div>
             </section>
           </div>

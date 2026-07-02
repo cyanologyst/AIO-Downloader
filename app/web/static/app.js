@@ -26,6 +26,8 @@ const state = {
   fallbackPoll: null,
   confirmResolve: null,
   portableToolInstallAttempted: false,
+  cookieBrowsers: [],
+  updatableTools: [],
 };
 
 const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
@@ -58,7 +60,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDialogs();
   bindInteractions();
   applySavedTheme();
-  await Promise.all([loadSettings(), refreshJobs()]);
+  await Promise.all([loadSettings(), refreshJobs(), loadCookieBrowsers()]);
   await loadDependencyHealth();
   connectJobEvents();
 });
@@ -162,6 +164,7 @@ function bindInteractions() {
   $("#clearHistoryButton").addEventListener("click", clearFinished);
   $("#settingsForm").addEventListener("submit", saveSettings);
   $("#themeToggle").addEventListener("click", toggleTheme);
+  document.addEventListener("click", handleDocumentActions);
 
   $("#torrentSearchForm").addEventListener("submit", searchTorrents);
   ["torrentProviderInput", "torrentCategoryInput", "torrentSortInput", "torrentOrderInput"].forEach((id) => {
@@ -191,6 +194,22 @@ function bindInteractions() {
   });
   $("#dependencyTestButton").addEventListener("click", () => loadDependencyHealth({ autoInstall: false }));
   $("#dependencyInstallButton").addEventListener("click", () => installMissingTools({ automatic: false }));
+  $("#toolUpdateButton")?.addEventListener("click", updateTools);
+  $("#cookieBrowserInput")?.addEventListener("change", renderCookieProfiles);
+  $("#cookieFetchButton")?.addEventListener("click", fetchBrowserCookies);
+  $$("[data-tool-subtab]").forEach((button) => button.addEventListener("click", () => setActiveToolSubtab(button.dataset.toolSubtab)));
+}
+
+function handleDocumentActions(event) {
+  const action = event.target.closest("[data-action]");
+  if (!action) return;
+  if (action.dataset.action === "open-cookie-settings") {
+    event.preventDefault();
+    closeDialog($("#downloadDialog"));
+    switchTab("settings");
+    setActiveSettingsSection("settingsYtdlp");
+    window.setTimeout(() => $("#cookieBrowserInput")?.focus(), 260);
+  }
 }
 
 function connectJobEvents() {
@@ -252,6 +271,19 @@ function setActiveSettingsSection(sectionId) {
     const active = panel.dataset.settingsSectionPanel === sectionId;
     panel.hidden = !active;
     panel.classList.toggle("active", active);
+  });
+}
+
+function setActiveToolSubtab(panelId) {
+  $$("[data-tool-subtab]").forEach((button) => {
+    const active = button.dataset.toolSubtab === panelId;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  $$(".tool-subpanel").forEach((panel) => {
+    const active = panel.id === panelId;
+    panel.classList.toggle("active", active);
+    panel.hidden = !active;
   });
 }
 
@@ -390,7 +422,7 @@ async function probeExtractor(url, sequence) {
     } else if (result.requires_auth) {
       const label = result.extractor ? ` (${result.extractor})` : "";
       probe.className = "extractor-probe unsupported";
-      probe.innerHTML = `<i class="ti ti-lock"></i>yt-dlp recognized this link${escapeHtml(label)}, but it requires browser cookies or sign-in.`;
+      probe.innerHTML = `<i class="ti ti-lock"></i><span>yt-dlp recognized this link${escapeHtml(label)}, but it requires browser cookies or sign-in.</span><button class="text-button inline-action" type="button" data-action="open-cookie-settings">Set up cookies</button>`;
     } else if (result.recognized) {
       const label = result.extractor ? ` (${result.extractor})` : "";
       probe.className = "extractor-probe unsupported";
@@ -1288,6 +1320,70 @@ async function loadSettings() {
   }
 }
 
+async function loadCookieBrowsers() {
+  const browserInput = $("#cookieBrowserInput");
+  if (!browserInput) return;
+  const status = $("#cookieFetchStatus");
+  try {
+    const result = await api("/api/cookies/browsers");
+    state.cookieBrowsers = result.browsers || [];
+    browserInput.innerHTML = state.cookieBrowsers.map((browser) => (
+      `<option value="${escapeHtml(browser.id)}">${escapeHtml(browser.label)}</option>`
+    )).join("");
+    renderCookieProfiles();
+    if (status) status.textContent = state.cookieBrowsers.length
+      ? "Choose a browser/profile, then fetch to create a local cookies file."
+      : "No supported browser cookie sources were detected.";
+  } catch (error) {
+    if (status) status.textContent = `Could not inspect browser profiles: ${error.message}`;
+  }
+}
+
+function renderCookieProfiles() {
+  const browserInput = $("#cookieBrowserInput");
+  const profileInput = $("#cookieProfileInput");
+  const pathInput = $("#cookieProfilePathInput");
+  if (!browserInput || !profileInput) return;
+  const browser = state.cookieBrowsers.find((item) => item.id === browserInput.value);
+  const profiles = browser?.profiles || [];
+  profileInput.innerHTML = [
+    `<option value="">Default profile</option>`,
+    ...profiles.map((profile) => `<option value="${escapeHtml(profile.path)}">${escapeHtml(profile.name)}</option>`),
+  ].join("");
+  if (pathInput) pathInput.value = "";
+}
+
+async function fetchBrowserCookies() {
+  const browserInput = $("#cookieBrowserInput");
+  const profileInput = $("#cookieProfileInput");
+  const pathInput = $("#cookieProfilePathInput");
+  const button = $("#cookieFetchButton");
+  const status = $("#cookieFetchStatus");
+  if (!browserInput || !button) return;
+  const profile = (pathInput?.value.trim() || profileInput?.value || "").trim();
+  setButtonLoading(button, true, "Fetching cookies…", "cookie");
+  if (status) status.textContent = "Reading the selected browser profile and exporting cookies…";
+  try {
+    const result = await api("/api/cookies/export", {
+      method: "POST",
+      body: JSON.stringify({ browser: browserInput.value, profile }),
+    });
+    if (result.settings) {
+      state.settings = result.settings;
+      const input = $("#settingsCookiesFile");
+      if (input) input.value = result.settings.ytdlp_cookies_file || "";
+    }
+    const cookies = result.cookies || {};
+    if (status) status.textContent = `Saved ${cookies.count || 0} cookies to ${cookies.path || "the app cookies file"}.`;
+    toast("Browser cookies exported and saved to yt-dlp settings.");
+  } catch (error) {
+    if (status) status.textContent = "Cookie export failed. Close the browser, unlock the profile, or choose another profile.";
+    toast(error.message, true);
+  } finally {
+    setButtonLoading(button, false, "Fetch cookies from browser", "cookie");
+  }
+}
+
 async function saveSettings(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1318,6 +1414,7 @@ async function loadDependencyHealth(options = {}) {
   setButtonLoading(button, true, "Testing…", "stethoscope");
   try {
     const health = await api("/api/health");
+    state.updatableTools = health.updatable_tools || state.updatableTools || [];
     const entries = Object.entries(health.dependencies || {});
     const missing = entries.filter(([, ok]) => !ok).map(([name]) => name);
     summary.textContent = missing.length
@@ -1339,6 +1436,7 @@ async function loadDependencyHealth(options = {}) {
         <strong>${escapeHtml(name)}</strong>
         <small>${ok ? "Ready" : "Missing"}</small>
       </span>`).join("");
+    renderToolUpdateGrid(health.dependencies || {});
     if (autoInstall && health.portable_lite && missing.length && !state.portableToolInstallAttempted) {
       state.portableToolInstallAttempted = true;
       summary.textContent = `Portable setup needs ${missing.join(", ")}. Starting automatic download…`;
@@ -1358,6 +1456,21 @@ async function loadDependencyHealth(options = {}) {
   } finally {
     setButtonLoading(button, false, "Test tools", "stethoscope");
   }
+}
+
+function renderToolUpdateGrid(dependencies = {}) {
+  const grid = $("#toolUpdateGrid");
+  if (!grid) return;
+  const tools = state.updatableTools.length ? state.updatableTools : ["aria2c", "yt-dlp", "ffmpeg", "deno"];
+  grid.innerHTML = tools.map((name) => {
+    const ok = dependencies[name] !== false;
+    return `
+      <span class="dependency-pill ${ok ? "ready" : "missing"}">
+        <i class="ti ti-${ok ? "refresh" : "alert-triangle"}" aria-hidden="true"></i>
+        <strong>${escapeHtml(name)}</strong>
+        <small>${ok ? "Can refresh" : "Will install"}</small>
+      </span>`;
+  }).join("");
 }
 
 async function installMissingTools(options = {}) {
@@ -1405,6 +1518,46 @@ async function installMissingTools(options = {}) {
     setButtonLoading(button, false, "Download missing tools", "download");
     if (testButton) testButton.disabled = false;
     if (refreshHealth) await loadDependencyHealth({ autoInstall: false });
+  }
+}
+
+async function updateTools() {
+  const button = $("#toolUpdateButton");
+  const testButton = $("#dependencyTestButton");
+  const summary = $("#dependencyHealthSummary");
+  if (!button) return;
+  setButtonLoading(button, true, "Updating…", "refresh");
+  if (testButton) testButton.disabled = true;
+  if (summary) summary.textContent = "Refreshing downloadable tools…";
+  try {
+    const result = await api("/api/tools/update", {
+      method: "POST",
+      body: JSON.stringify({ tools: state.updatableTools || undefined }),
+    });
+    if (result.settings) state.settings = result.settings;
+    const updated = result.updated || [];
+    const failed = result.failed || [];
+    if (failed.length) {
+      toast(`${failed.length} tool${failed.length === 1 ? "" : "s"} could not be updated.`, true);
+      const grid = $("#toolUpdateGrid");
+      if (grid) {
+        grid.innerHTML = failed.map((item) => `
+          <span class="dependency-pill missing">
+            <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+            <strong>${escapeHtml(item.name)}</strong>
+            <small>${escapeHtml(item.message || "Update failed")}</small>
+          </span>`).join("");
+      }
+    } else {
+      toast(updated.length ? `Updated ${updated.join(", ")}` : "Tools are already current.");
+    }
+    await loadDependencyHealth({ autoInstall: false });
+  } catch (error) {
+    toast(error.message, true);
+    if (summary) summary.textContent = "Tool update failed.";
+  } finally {
+    setButtonLoading(button, false, "Update tools", "refresh");
+    if (testButton) testButton.disabled = false;
   }
 }
 

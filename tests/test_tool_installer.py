@@ -45,6 +45,50 @@ def test_install_missing_route_updates_runtime_settings(monkeypatch, tmp_path):
     assert store.get().deno_bin == str(fake_deno)
 
 
+def test_update_tools_route_forces_updatable_tools(monkeypatch, tmp_path):
+    fake_ytdlp = tmp_path / "yt-dlp.exe"
+    fake_ytdlp.write_text("fake exe", encoding="utf-8")
+    store = SettingsStore(tmp_path / "settings.json")
+    app = create_app(store)
+    observed: dict[str, object] = {}
+
+    def fake_install(_settings, tools=None, force_tools=None):
+        observed["tools"] = list(tools or [])
+        observed["force_tools"] = set(force_tools or [])
+        return (
+            [ToolInstallOutcome("yt-dlp", "installed", str(fake_ytdlp), "Installed successfully")],
+            {"ytdlp_bin": str(fake_ytdlp)},
+        )
+
+    monkeypatch.setattr("app.web.app.install_missing_tools", fake_install)
+
+    response = app.test_client().post("/api/tools/update", json={"tools": ["yt-dlp"]})
+
+    assert response.status_code == 200
+    assert observed["tools"] == ["yt-dlp"]
+    assert observed["force_tools"] == {"yt-dlp"}
+    assert response.get_json()["updated"] == ["yt-dlp"]
+    assert store.get().ytdlp_bin == str(fake_ytdlp)
+
+
+def test_cookie_export_route_updates_cookie_setting(monkeypatch, tmp_path):
+    cookies = tmp_path / "cookies.txt"
+    cookies.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+    store = SettingsStore(tmp_path / "settings.json")
+    app = create_app(store)
+
+    monkeypatch.setattr(
+        "app.web.app.export_browser_cookies",
+        lambda browser, profile="": {"browser": browser, "profile": profile, "path": str(cookies), "count": 2},
+    )
+
+    response = app.test_client().post("/api/cookies/export", json={"browser": "edge", "profile": "Default"})
+
+    assert response.status_code == 200
+    assert response.get_json()["cookies"]["count"] == 2
+    assert store.get().ytdlp_cookies_file == str(cookies)
+
+
 def test_portable_lite_route_forces_bundled_ytdlp_replacement(monkeypatch, tmp_path):
     store = SettingsStore(tmp_path / "settings.json")
     store.update({"ytdlp_bin": str(tmp_path / "_internal" / "AIO Downloader.exe")})

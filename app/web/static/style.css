@@ -188,7 +188,7 @@ body.desktop-mode .desktop-titlebar { display: flex; }
   height: 74px;
   padding: 0 26px;
   display: grid;
-  grid-template-columns: 178px 198px minmax(340px, 1fr) 42px;
+  grid-template-columns: 198px minmax(340px, 1fr) 42px;
   align-items: center;
   gap: 20px;
   border-bottom: 1px solid var(--border);
@@ -202,11 +202,6 @@ body.desktop-mode .app-header {
   background: var(--background);
   backdrop-filter: none;
 }
-body.desktop-mode .app-header .brand {
-  display: none;
-}
-.brand { font-size: 18px; font-weight: 700; letter-spacing: -.5px; white-space: nowrap; }
-.brand span { color: var(--primary); }
 .primary-tabs {
   align-self: stretch;
   display: flex;
@@ -771,6 +766,27 @@ body.desktop-mode #torrentsPanel .torrent-results {
 }
 .settings-summary-strip span { display: grid; gap: 4px; align-content: center; }
 .settings-summary-strip small { color: var(--muted); font-weight: 600; }
+.cookie-fetch-card {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(130px, .6fr) minmax(150px, .75fr);
+  gap: 12px;
+  align-items: end;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--background) 42%, transparent);
+}
+.cookie-fetch-card > div:first-child {
+  display: grid;
+  gap: 4px;
+  align-self: center;
+}
+.cookie-fetch-card small { color: var(--muted); font-weight: 500; }
+.cookie-fetch-card .button { min-width: 208px; }
+.cookie-fetch-status {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
 .switch-field {
   position: relative;
   min-height: 76px;
@@ -837,6 +853,46 @@ body.desktop-mode #torrentsPanel .torrent-results {
   border-radius: 9px;
   background: color-mix(in srgb, var(--background) 42%, transparent);
 }
+.mini-tabs {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.mini-tab {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--background) 42%, transparent);
+  color: var(--muted);
+  font-weight: 800;
+  transition: border-color .18s ease, color .18s ease, background .18s ease, transform .18s var(--ease);
+}
+.mini-tab:hover,
+.mini-tab.active {
+  border-color: color-mix(in srgb, var(--primary) 78%, var(--border));
+  color: var(--foreground);
+}
+.mini-tab.active { background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
+.tool-subpanel {
+  display: grid;
+  gap: 16px;
+}
+.tool-subpanel[hidden] { display: none; }
+.tool-subpanel.active { animation: panel-in .22s var(--ease); }
+.tool-update-card {
+  min-height: 72px;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--background) 42%, transparent);
+}
+.tool-update-card > div { display: grid; gap: 4px; }
+.tool-update-card small { color: var(--muted); }
 .tool-health-card > div:not(.tool-health-actions) { display: grid; gap: 4px; }
 .tool-health-card small { color: var(--muted); }
 .tool-health-actions {
@@ -966,6 +1022,11 @@ body.desktop-mode #torrentsPanel .torrent-results {
 .extractor-probe.checking { color: var(--info); }
 .extractor-probe.supported { color: var(--success); }
 .extractor-probe.unsupported { color: var(--warning); }
+.extractor-probe .inline-action {
+  margin-left: 4px;
+  color: var(--primary);
+  white-space: nowrap;
+}
 .dialog-separator { height: 1px; background: var(--border); }
 .options-heading { display: flex; justify-content: space-between; gap: 20px; }
 .options-heading > div { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 8px; }
@@ -1180,7 +1241,7 @@ body.desktop-mode #torrentsPanel .torrent-results {
 @keyframes toast-in { from { opacity: 0; transform: translateY(12px); } }
 
 @media (max-width: 1100px) {
-  .app-header { grid-template-columns: 160px 170px 1fr 42px; }
+  .app-header { grid-template-columns: 170px minmax(220px, 1fr) 42px; }
   body.desktop-mode .app-header { grid-template-columns: minmax(120px, 170px) minmax(220px, 1fr) 42px; }
   .downloads-toolbar { align-items: stretch; flex-direction: column; }
   .toolbar-actions { justify-content: flex-end; }
@@ -1197,7 +1258,7 @@ body.desktop-mode #torrentsPanel .torrent-results {
   .app-header {
     height: auto;
     min-height: 70px;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     padding: 12px 16px;
     gap: 10px;
   }
@@ -1208,7 +1269,8 @@ body.desktop-mode #torrentsPanel .torrent-results {
   body.desktop-mode .new-download-button { grid-column: 1; justify-self: start; }
   body.desktop-mode .primary-tabs { grid-column: 1 / -1; }
   body.desktop-mode #themeToggle { grid-column: 2; grid-row: 1; }
-  .new-download-button { grid-column: 2; grid-row: 1; }
+  .new-download-button { grid-column: 1; grid-row: 1; }
+  #themeToggle { grid-column: 3; grid-row: 1; }
   .primary-tabs { grid-column: 1 / -1; grid-row: 2; order: 3; justify-content: stretch; }
   .primary-tab { flex: 1; min-width: 0; min-height: 44px; }
   .main-content { padding: 18px 14px 40px; }
@@ -1237,6 +1299,8 @@ body.desktop-mode #torrentsPanel .torrent-results {
   .settings-rail-tip { display: none; }
   .settings-section { grid-template-columns: 1fr; gap: 20px; }
   .settings-section-title p { max-width: 460px; }
+  .cookie-fetch-card { grid-template-columns: 1fr; }
+  .tool-update-card { grid-template-columns: 1fr; align-items: stretch; }
   .batch-summary { grid-template-columns: repeat(2, 1fr); }
   .batch-summary > div:nth-child(2) { border-right: 0; }
   .batch-summary > div:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
@@ -1249,7 +1313,6 @@ body.desktop-mode #torrentsPanel .torrent-results {
 
 @media (max-width: 580px) {
   body { font-size: 12px; }
-  .brand { font-size: 16px; }
   .new-download-button { width: 42px; padding: 0; }
   .new-download-button span { display: none; }
   .primary-tab { min-width: 0; padding: 0 3px; font-size: 11px; }
@@ -1282,12 +1345,15 @@ body.desktop-mode #torrentsPanel .torrent-results {
   .torrent-page-jump { order: 4; width: 100%; justify-content: center; }
   .settings-section { padding: 18px; }
   .settings-fields, .context-options { grid-template-columns: 1fr; }
+  .mini-tabs { width: 100%; }
+  .mini-tab { flex: 1; }
   .settings-toggle-grid { grid-template-columns: 1fr; }
   .settings-summary-strip { grid-template-columns: 1fr; min-height: auto; }
   .settings-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-heading { gap: 12px; }
   .settings-save-button { min-width: 42px; }
   .tool-health-card { align-items: stretch; grid-template-columns: 1fr; }
+  .tool-update-card .button { width: 100%; }
   .tool-health-actions, .tool-health-actions .button { width: 100%; }
   .field-wide { grid-column: auto; }
   .dialog-content { padding: 18px; }
