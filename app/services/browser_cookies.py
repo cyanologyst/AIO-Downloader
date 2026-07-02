@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import re
+import sqlite3
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+import yt_dlp.cookies as ytdlp_cookies
 from yt_dlp.cookies import SUPPORTED_BROWSERS, extract_cookies_from_browser
 
 from app.utils.runtime import config_dir
@@ -53,8 +56,12 @@ def export_browser_cookies(browser: str, profile: str = "") -> dict[str, object]
     if browser == "safari" and sys.platform != "darwin":
         raise ValueError("Safari cookie export is only available on macOS.")
 
-    profile = profile.strip()
-    jar = extract_cookies_from_browser(browser, profile=profile or None)
+    profile = _normalize_profile_path(browser, profile.strip())
+    try:
+        with _patched_cookie_database_open():
+            jar = extract_cookies_from_browser(browser, profile=profile or None)
+    except Exception as exc:
+        raise RuntimeError(_friendly_cookie_error(str(exc), browser)) from exc
     if not jar:
         raise RuntimeError("No cookies were exported. Make sure the browser profile is signed in.")
 
@@ -69,6 +76,29 @@ def export_browser_cookies(browser: str, profile: str = "") -> dict[str, object]
         "path": str(output_path.resolve()),
         "count": len(jar),
     }
+
+
+@contextmanager
+def _patched_cookie_database_open():
+    original = ytdlp_cookies._open_database_copy
+
+    def open_database_copy_or_readonly(database_path: str, tmpdir: str):
+        try:
+            return original(database_path, tmpdir)
+        except PermissionError as exc:
+            if sys.platform != "win32":
+                raise
+            try:
+                connection = sqlite3.connect(f"{Path(database_path).resolve().as_uri()}?mode=ro&immutable=1", uri=True)
+                return connection.cursor()
+            except Exception:
+                raise exc
+
+    ytdlp_cookies._open_database_copy = open_database_copy_or_readonly
+    try:
+        yield
+    finally:
+        ytdlp_cookies._open_database_copy = original
 
 
 def _detect_profiles(browser: str) -> list[BrowserProfile]:
@@ -111,6 +141,29 @@ def _detect_profiles(browser: str) -> list[BrowserProfile]:
         if profile.is_dir():
             profiles.append(BrowserProfile(name, str(profile.resolve())))
     return profiles
+
+
+def _normalize_profile_path(browser: str, profile: str) -> str:
+    if not profile:
+        return ""
+    if browser not in {"brave", "chrome", "chromium", "edge", "opera", "vivaldi", "whale"}:
+        return profile
+    path = Path(profile).expanduser()
+    if path.name.lower() == "cookies" and path.parent.name.lower() == "network":
+        return str(path.parent.parent.resolve())
+    return profile
+
+
+def _friendly_cookie_error(message: str, browser: str) -> str:
+    compact = " ".join(message.split())
+    if "could not copy chrome cookie database" in compact.lower() or "permission" in compact.lower():
+        label = BROWSER_LABELS.get(browser, browser.title())
+        return (
+            f"{label} is locking its cookie database. Fully close {label} first "
+            "(including background/tray processes), then click Fetch cookies again. "
+            "If it still fails, choose Firefox or export a Netscape cookies.txt file manually."
+        )
+    return compact or "Cookie export failed."
 
 
 def _safe_filename(value: str) -> str:

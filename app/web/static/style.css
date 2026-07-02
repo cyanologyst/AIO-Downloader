@@ -732,6 +732,7 @@ body.desktop-mode #torrentsPanel .torrent-results {
 }
 .field { min-width: 0; display: grid; gap: 7px; color: var(--foreground); font-weight: 600; }
 .field > small { color: var(--muted); font-weight: 400; }
+.field > small.warning { color: var(--warning); }
 .field-error {
   min-height: 18px;
   color: var(--danger);

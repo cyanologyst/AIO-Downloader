@@ -196,6 +196,7 @@ function bindInteractions() {
   $("#dependencyInstallButton").addEventListener("click", () => installMissingTools({ automatic: false }));
   $("#toolUpdateButton")?.addEventListener("click", updateTools);
   $("#cookieBrowserInput")?.addEventListener("change", renderCookieProfiles);
+  $("#settingsCookiesFile")?.addEventListener("input", updateCookieFileHint);
   $("#cookieFetchButton")?.addEventListener("click", fetchBrowserCookies);
   $$("[data-tool-subtab]").forEach((button) => button.addEventListener("click", () => setActiveToolSubtab(button.dataset.toolSubtab)));
 }
@@ -1315,6 +1316,7 @@ async function loadSettings() {
       else input.value = value;
     });
     resetDownloadOptions();
+    updateCookieFileHint();
   } catch (error) {
     toast(error.message, true);
   }
@@ -1372,15 +1374,31 @@ async function fetchBrowserCookies() {
       state.settings = result.settings;
       const input = $("#settingsCookiesFile");
       if (input) input.value = result.settings.ytdlp_cookies_file || "";
+      updateCookieFileHint();
     }
     const cookies = result.cookies || {};
     if (status) status.textContent = `Saved ${cookies.count || 0} cookies to ${cookies.path || "the app cookies file"}.`;
     toast("Browser cookies exported and saved to yt-dlp settings.");
   } catch (error) {
-    if (status) status.textContent = "Cookie export failed. Close the browser, unlock the profile, or choose another profile.";
+    if (status) status.textContent = error.message || "Cookie export failed. Close the browser, unlock the profile, or choose another profile.";
     toast(error.message, true);
   } finally {
     setButtonLoading(button, false, "Fetch cookies from browser", "cookie");
+  }
+}
+
+function updateCookieFileHint() {
+  const input = $("#settingsCookiesFile");
+  const hint = $("#cookiesFileHint");
+  if (!input || !hint) return;
+  const value = input.value.trim().replaceAll("\\", "/").toLowerCase();
+  const looksLikeBrowserDb = value.endsWith("/network/cookies") || value.endsWith("/cookies.sqlite");
+  if (looksLikeBrowserDb) {
+    hint.textContent = "This is a browser database, not a yt-dlp cookies.txt file. Use Fetch cookies to export a compatible file.";
+    hint.classList.add("warning");
+  } else {
+    hint.textContent = "Use a Netscape cookies.txt file. Browser SQLite databases must be fetched first.";
+    hint.classList.remove("warning");
   }
 }
 
