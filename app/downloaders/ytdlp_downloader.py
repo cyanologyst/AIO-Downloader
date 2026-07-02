@@ -59,7 +59,11 @@ class YtdlpDownloader(BaseDownloader):
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             return False
-        return bool((await self.probe(url))["supported"])
+        probe = await self.probe(url)
+        return bool(
+            probe.get("supported")
+            or (probe.get("recognized") and probe.get("requires_auth"))
+        )
 
     async def probe(self, url: str) -> dict[str, object]:
         parsed = urlparse(url)

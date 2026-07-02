@@ -98,3 +98,24 @@ def test_probe_reports_authentication_block(monkeypatch):
     assert result["recognized"] is True
     assert result["requires_auth"] is True
     assert result["extractor"] == "Youtube"
+
+
+def test_can_handle_keeps_auth_blocked_ytdlp_urls_in_ytdlp_flow(monkeypatch):
+    downloader = YtdlpDownloader("yt-dlp", "ffmpeg")
+    monkeypatch.setattr(
+        downloader,
+        "probe",
+        lambda _url: asyncio.sleep(
+            0,
+            result={
+                "supported": False,
+                "recognized": True,
+                "requires_auth": True,
+                "extractor": "Youtube",
+            },
+        ),
+    )
+
+    assert asyncio.run(
+        downloader.can_handle("https://www.youtube.com/watch?v=qZQoF5GF7XI")
+    ) is True
