@@ -54,16 +54,43 @@ Batch downloads are reviewed before anything is queued. Large lists default to
 the first 20 selected items so the app does not accidentally queue a giant
 profile, studio, or playlist.
 
+<table>
+  <tr>
+    <td><img src="https://www.google.com/s2/favicons?domain=youtube.com&sz=32" width="18" alt="" /> <strong>YouTube</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=hanime.tv&sz=32" width="18" alt="" /> <strong>Hanime</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=hentaihaven.com&sz=32" width="18" alt="" /> <strong>HentaiHaven</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=hstream.moe&sz=32" width="18" alt="" /> <strong>HStream</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=pornhub.com&sz=32" width="18" alt="" /> <strong>PornHub</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=github.com&sz=32" width="18" alt="" /> <strong>yt-dlp</strong></td>
+  </tr>
+  <tr>
+    <td><img src="https://www.google.com/s2/favicons?domain=spotify.com&sz=32" width="18" alt="" /> <strong>Spotify</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=tiktok.com&sz=32" width="18" alt="" /> <strong>TikTok</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=instagram.com&sz=32" width="18" alt="" /> <strong>Instagram</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=x.com&sz=32" width="18" alt="" /> <strong>X / Twitter</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=facebook.com&sz=32" width="18" alt="" /> <strong>Facebook</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=vimeo.com&sz=32" width="18" alt="" /> <strong>Vimeo</strong></td>
+  </tr>
+  <tr>
+    <td><img src="https://www.google.com/s2/favicons?domain=mangadex.org&sz=32" width="18" alt="" /> <strong>MangaDex</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=nhentai.net&sz=32" width="18" alt="" /> <strong>nhentai</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=e-hentai.org&sz=32" width="18" alt="" /> <strong>E-Hentai</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=thepiratebay.org&sz=32" width="18" alt="" /> <strong>The Pirate Bay</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=prowlarr.com&sz=32" width="18" alt="" /> <strong>Prowlarr</strong></td>
+    <td><img src="https://www.google.com/s2/favicons?domain=dailymotion.com&sz=32" width="18" alt="" /> <strong>Dailymotion</strong></td>
+  </tr>
+</table>
+
 | Provider / site | Supported batch URL style | What the batch review shows | Notes |
 |---|---|---|---|
-| YouTube / yt-dlp playlists | Public playlist, channel, series, or other yt-dlp multi-item URL | Item title, URL, duration/size when yt-dlp exposes it, thumbnail when available | Works through yt-dlp's playlist extraction. Cookies may be required for restricted content. |
-| Hanime | `https://hanime.tv/browse/brands/<brand>` | Studio/brand videos, titles, durations, thumbnails | Requires Deno and `hanime-plugin` support in the environment. |
-| Hanime playlists | `https://hanime.tv/playlists/<playlist-id>` | Playlist videos, titles, thumbnails, available duration metadata | Public playlists are parsed from Hanime page data and visible playlist cards. |
-| HentaiHaven series | `https://hentaihaven.com/video/<series>` | Episodes for the series, episode titles, shared poster thumbnail | Episodes are sorted naturally. |
-| HentaiHaven studios | `https://hentaihaven.com/studio/<studio>` | All discoverable public episodes from the studio pages | Studio pages are crawled with retries; individual 5xx series failures are skipped instead of killing the whole batch. |
-| HStream series | `https://hstream.moe/hentai/<series>` | Public series episode URLs | Episode-numbered pages are discovered from the series page. |
-| PornHub model/profile | `https://www.pornhub.com/model/<name>` or `https://www.pornhub.com/pornstar/<name>` | Public profile videos and titles | Public pages only; cookies/proxy can be configured when authorized content requires them. |
-| Generic yt-dlp playlist extractors | Any supported site where yt-dlp returns multiple entries | Flat playlist entries with titles, URLs, thumbnails, duration, or size when exposed | Useful for sites not explicitly implemented in this project. |
+| <img src="https://www.google.com/s2/favicons?domain=youtube.com&sz=32" width="18" alt="" /> YouTube / yt-dlp playlists | Public playlist, channel, series, or other yt-dlp multi-item URL | Item title, URL, duration/size when yt-dlp exposes it, thumbnail when available | Works through yt-dlp's playlist extraction. Cookies may be required for restricted content. |
+| <img src="https://www.google.com/s2/favicons?domain=hanime.tv&sz=32" width="18" alt="" /> Hanime brands | `https://hanime.tv/browse/brands/<brand>` | Studio/brand videos, titles, durations, thumbnails | Requires Deno and `hanime-plugin` support in the environment. |
+| <img src="https://www.google.com/s2/favicons?domain=hanime.tv&sz=32" width="18" alt="" /> Hanime playlists | `https://hanime.tv/playlists/<playlist-id>` | Playlist videos, titles, thumbnails, available duration metadata | Public playlists are parsed from Hanime page data and visible playlist cards. |
+| <img src="https://www.google.com/s2/favicons?domain=hentaihaven.com&sz=32" width="18" alt="" /> HentaiHaven series | `https://hentaihaven.com/video/<series>` | Episodes for the series, episode titles, shared poster thumbnail | Episodes are sorted naturally. |
+| <img src="https://www.google.com/s2/favicons?domain=hentaihaven.com&sz=32" width="18" alt="" /> HentaiHaven studios | `https://hentaihaven.com/studio/<studio>` | All discoverable public episodes from the studio pages | Studio pages are crawled with retries; individual 5xx series failures are skipped instead of killing the whole batch. |
+| <img src="https://www.google.com/s2/favicons?domain=hstream.moe&sz=32" width="18" alt="" /> HStream series | `https://hstream.moe/hentai/<series>` | Public series episode URLs | Episode-numbered pages are discovered from the series page. |
+| <img src="https://www.google.com/s2/favicons?domain=pornhub.com&sz=32" width="18" alt="" /> PornHub model/profile | `https://www.pornhub.com/model/<name>` or `https://www.pornhub.com/pornstar/<name>` | Public profile videos and titles | Public pages only; cookies/proxy can be configured when authorized content requires them. |
+| <img src="https://www.google.com/s2/favicons?domain=github.com&sz=32" width="18" alt="" /> Generic yt-dlp playlist extractors | Any supported site where yt-dlp returns multiple entries | Flat playlist entries with titles, URLs, thumbnails, duration, or size when exposed | Useful for sites not explicitly implemented in this project. |
 
 ## 🎵 Spotify downloader
 
