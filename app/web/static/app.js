@@ -25,6 +25,7 @@ const state = {
   eventSource: null,
   fallbackPoll: null,
   confirmResolve: null,
+  portableToolInstallAttempted: false,
 };
 
 const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
@@ -188,8 +189,8 @@ function bindInteractions() {
   $$(".settings-nav-button").forEach((button) => {
     button.addEventListener("click", () => setActiveSettingsSection(button.dataset.settingsSection));
   });
-  $("#dependencyTestButton").addEventListener("click", loadDependencyHealth);
-  $("#dependencyInstallButton").addEventListener("click", installMissingTools);
+  $("#dependencyTestButton").addEventListener("click", () => loadDependencyHealth({ autoInstall: false }));
+  $("#dependencyInstallButton").addEventListener("click", () => installMissingTools({ automatic: false }));
 }
 
 function connectJobEvents() {
@@ -1301,13 +1302,14 @@ async function saveSettings(event) {
   try {
     state.settings = await api("/api/settings", { method: "POST", body: JSON.stringify(payload) });
     toast("Settings saved");
-    await loadDependencyHealth();
+    await loadDependencyHealth({ autoInstall: false });
   } catch (error) {
     toast(error.message, true);
   }
 }
 
-async function loadDependencyHealth() {
+async function loadDependencyHealth(options = {}) {
+  const autoInstall = options.autoInstall !== false;
   const button = $("#dependencyTestButton");
   const installButton = $("#dependencyInstallButton");
   const summary = $("#dependencyHealthSummary");
@@ -1337,6 +1339,11 @@ async function loadDependencyHealth() {
         <strong>${escapeHtml(name)}</strong>
         <small>${ok ? "Ready" : "Missing"}</small>
       </span>`).join("");
+    if (autoInstall && health.portable_lite && missing.length && !state.portableToolInstallAttempted) {
+      state.portableToolInstallAttempted = true;
+      summary.textContent = `Portable setup needs ${missing.join(", ")}. Starting automatic download…`;
+      window.setTimeout(() => installMissingTools({ automatic: true }), 250);
+    }
   } catch (error) {
     summary.textContent = "Could not check tool health.";
     const summaryChip = $("#settingsToolSummary");
@@ -1353,7 +1360,8 @@ async function loadDependencyHealth() {
   }
 }
 
-async function installMissingTools() {
+async function installMissingTools(options = {}) {
+  const automatic = Boolean(options.automatic);
   const button = $("#dependencyInstallButton");
   const testButton = $("#dependencyTestButton");
   const summary = $("#dependencyHealthSummary");
@@ -1361,8 +1369,10 @@ async function installMissingTools() {
   if (button.disabled && button.dataset.missingCount === "0") return;
   let refreshHealth = false;
   setButtonLoading(button, true, "Downloading…", "download");
+  if (automatic) setButtonLoading(button, true, "Auto setup…", "download");
   if (testButton) testButton.disabled = true;
   if (summary) summary.textContent = "Downloading and configuring missing tools…";
+  if (automatic && summary) summary.textContent = "Portable first-run setup is downloading and configuring missing tools…";
   try {
     const result = await api("/api/tools/install-missing", {
       method: "POST",
@@ -1383,7 +1393,7 @@ async function installMissingTools() {
           </span>`).join("");
       }
     } else if (installed.length) {
-      toast(`Installed ${installed.join(", ")}`);
+      toast(`${automatic ? "Portable setup installed" : "Installed"} ${installed.join(", ")}`);
     } else {
       toast("All tools are already ready.");
     }
@@ -1394,7 +1404,7 @@ async function installMissingTools() {
   } finally {
     setButtonLoading(button, false, "Download missing tools", "download");
     if (testButton) testButton.disabled = false;
-    if (refreshHealth) await loadDependencyHealth();
+    if (refreshHealth) await loadDependencyHealth({ autoInstall: false });
   }
 }
 

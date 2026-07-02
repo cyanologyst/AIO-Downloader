@@ -17,6 +17,16 @@ def resource_root() -> Path:
     return Path(getattr(sys, "_MEIPASS", app_root())).resolve()
 
 
+def is_portable_lite() -> bool:
+    if not is_frozen():
+        return os.getenv("AIO_PORTABLE_LITE") == "1"
+    return (
+        os.getenv("AIO_PORTABLE_LITE") == "1"
+        or (app_root() / "PORTABLE_LITE").exists()
+        or (resource_root() / "PORTABLE_LITE").exists()
+    )
+
+
 def user_data_root() -> Path:
     if not is_frozen():
         return app_root()

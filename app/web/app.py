@@ -37,7 +37,7 @@ from app.services.torrent_search import (
     TorrentSearchError,
 )
 from app.utils.paths import safe_existing_path
-from app.utils.runtime import config_dir
+from app.utils.runtime import config_dir, is_portable_lite, managed_bin_dir
 from app.utils.subprocess_utils import subprocess_window_options
 
 
@@ -515,6 +515,8 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
                 "status": "ok",
                 "download_dir": str(current.download_path),
                 "dependencies": dependencies,
+                "portable_lite": is_portable_lite(),
+                "managed_tools_dir": str(managed_bin_dir()),
             }
         )
 

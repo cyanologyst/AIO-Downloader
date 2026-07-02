@@ -167,6 +167,19 @@ The portable folder/zip can still be generated for debugging:
 .\scripts\package-windows-bundle.ps1 -Version 1.0.0
 ```
 
+For a smaller portable zip that downloads missing external tools on first
+launch, build the portable-lite package:
+
+```powershell
+.\scripts\package-windows-portable-lite.ps1 -Version 1.0.0
+```
+
+Portable-lite bundles the Windows app, Python runtime, app libraries, yt-dlp
+and spotDL launchers, then installs missing `aria2c`, `ffmpeg`/`ffprobe`, and
+Deno into the app's own `tools\bin` folder. It prepends that folder to the
+app process PATH and saves the resolved paths in settings; it does not modify
+the user's global Windows PATH.
+
 macOS and Ubuntu packaging will be added later as platform-specific installers.
 
 ## 🚀 Windows development install
