@@ -76,12 +76,20 @@ def resolve_tool(name: str, configured: str = "") -> str:
     return shutil.which(name) or ""
 
 
-def install_missing_tools(settings: Settings, tools: Iterable[str] | None = None) -> tuple[list[ToolInstallOutcome], dict[str, str]]:
+def install_missing_tools(
+    settings: Settings,
+    tools: Iterable[str] | None = None,
+    force_tools: Iterable[str] | None = None,
+) -> tuple[list[ToolInstallOutcome], dict[str, str]]:
     apply_managed_tool_path()
     requested = list(tools or TOOL_SETTINGS)
     unknown = sorted(set(requested) - set(TOOL_SETTINGS))
     if unknown:
         raise ValueError(f"Unsupported tool(s): {', '.join(unknown)}")
+    forced = set(force_tools or ())
+    unknown_forced = sorted(forced - set(TOOL_SETTINGS))
+    if unknown_forced:
+        raise ValueError(f"Unsupported forced tool(s): {', '.join(unknown_forced)}")
 
     outcomes: list[ToolInstallOutcome] = []
     installed_paths: dict[str, str] = {}
@@ -90,7 +98,7 @@ def install_missing_tools(settings: Settings, tools: Iterable[str] | None = None
     for name in requested:
         configured = getattr(settings, TOOL_SETTINGS[name], "")
         existing = resolve_tool(name, configured)
-        if existing:
+        if existing and name not in forced:
             outcomes.append(ToolInstallOutcome(name, "ready", existing, "Already available"))
             continue
         try:

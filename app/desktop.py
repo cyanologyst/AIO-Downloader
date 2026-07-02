@@ -63,7 +63,7 @@ def _start_server(store: SettingsStore) -> DesktopServer:
     actual_port = int(server.server_port)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    url = f"http://{host}:{actual_port}/?desktop=1"
+    url = f"http://{host}:{actual_port}/"
     return DesktopServer(server=server, thread=thread, url=url)
 
 
@@ -80,9 +80,6 @@ def main() -> None:
             "Desktop mode requires pywebview. Install it with: python -m pip install pywebview"
         ) from exc
 
-    webview.settings["DRAG_REGION_SELECTOR"] = ".pywebview-drag-region"
-    webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = False
-
     api = DesktopApi()
     window = webview.create_window(
         "AIO Downloader",
@@ -90,14 +87,15 @@ def main() -> None:
         js_api=api,
         width=1440,
         height=920,
+        resizable=False,
         min_size=(1080, 680),
-        frameless=True,
-        easy_drag=False,
-        shadow=False,
+        frameless=False,
+        easy_drag=True,
+        shadow=True,
         transparent=False,
         background_color="#06111b",
         text_select=True,
-        draggable=True,
+        draggable=False,
     )
     api.bind(window, server)
 

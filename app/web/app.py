@@ -37,7 +37,7 @@ from app.services.torrent_search import (
     TorrentSearchError,
 )
 from app.utils.paths import safe_existing_path
-from app.utils.runtime import config_dir, is_portable_lite, managed_bin_dir
+from app.utils.runtime import config_dir, is_bundled_tool, is_portable_lite, managed_bin_dir
 from app.utils.subprocess_utils import subprocess_window_options
 
 
@@ -510,6 +510,8 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
     def health():
         current = store.get()
         dependencies = tool_health(current)
+        if is_portable_lite() and is_bundled_tool(current.ytdlp_bin, "yt-dlp"):
+            dependencies["yt-dlp"] = False
         return jsonify(
             {
                 "status": "ok",
@@ -524,8 +526,11 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
     def install_tools():
         payload = request.get_json(silent=True) or {}
         tools = payload.get("tools") if isinstance(payload, dict) else None
+        force_tools = set(payload.get("force_tools") or []) if isinstance(payload, dict) else set()
+        if is_portable_lite() and is_bundled_tool(store.get().ytdlp_bin, "yt-dlp"):
+            force_tools.add("yt-dlp")
         try:
-            outcomes, installed_paths = install_missing_tools(store.get(), tools)
+            outcomes, installed_paths = install_missing_tools(store.get(), tools, force_tools=force_tools)
             updated = store.update(installed_paths) if installed_paths else store.get()
             if installed_paths:
                 sync_runtime_settings()

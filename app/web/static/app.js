@@ -65,9 +65,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 function initDesktopShell() {
   const params = new URLSearchParams(window.location.search);
-  const desktop = params.get("desktop") === "1" || Boolean(window.pywebview);
-  document.body.classList.toggle("desktop-mode", desktop);
-  if (!desktop) return;
+  const customChrome = params.get("desktop") === "1";
+  document.body.classList.toggle("desktop-mode", customChrome);
+  if (!customChrome) return;
   $("#desktopMinimizeButton")?.addEventListener("click", () => window.pywebview?.api?.minimize?.());
   $("#desktopCloseButton")?.addEventListener("click", () => window.pywebview?.api?.close?.());
 }
