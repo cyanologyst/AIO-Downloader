@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import yt_dlp
+
 from app.services.batch_manifest import BatchItem, BatchManifest, BatchManifestService
 
 
@@ -53,3 +55,44 @@ def test_youtube_playlist_thumbnail_fallback_from_url():
     )
 
     assert thumbnail == "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+
+
+def test_social_profile_manifest_uses_profile_title_and_avatar(monkeypatch, tmp_path: Path):
+    service = BatchManifestService(tmp_path / "batches", download_dir=tmp_path)
+
+    class FakeYDL:
+        def __init__(self, _options):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def extract_info(self, _url, download=False):
+            return {
+                "title": "Ignored profile title",
+                "extractor_key": "Instagram",
+                "thumbnail": "https://img.example.com/avatar.jpg",
+                "entries": [
+                    {
+                        "url": "https://www.instagram.com/p/one/",
+                        "title": "One",
+                        "thumbnail": "https://img.example.com/one.jpg",
+                    },
+                    {
+                        "url": "https://www.instagram.com/p/two/",
+                        "title": "Two",
+                    },
+                ],
+            }
+
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", FakeYDL)
+
+    manifest = service._inspect_ytdlp("https://www.instagram.com/example.user/")
+
+    assert manifest[0] == "example.user (Instagram)"
+    assert manifest[1] == "Instagram"
+    assert manifest[3] == "https://img.example.com/avatar.jpg"
+    assert manifest[2][0].thumbnail_url == "https://img.example.com/one.jpg"

@@ -486,6 +486,24 @@ body.desktop-mode .settings-section {
 .source-icon.spotify { color: #1ed760; }
 .source-icon.gallery { color: #ad79ff; }
 .source-icon.torrent { color: var(--primary); }
+.source-icon.profile-avatar {
+  overflow: hidden;
+  position: relative;
+  background: var(--background);
+}
+.source-icon.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.source-icon.profile-avatar i {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+}
+.source-icon.profile-avatar.thumbnail-failed img { display: none; }
+.source-icon.profile-avatar.thumbnail-failed i { display: grid; }
 .download-copy { min-width: 0; display: grid; gap: 4px; }
 .download-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .download-copy small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

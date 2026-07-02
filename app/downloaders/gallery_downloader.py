@@ -59,6 +59,7 @@ class GalleryDownloader(BaseDownloader):
                     status="downloading",
                     metadata={"unit": "images"},
                 )
+        pdf_path = ""
         if request.convert_to_pdf:
             pdf = await asyncio.to_thread(
                 convert_folder_to_pdf,
@@ -66,12 +67,18 @@ class GalleryDownloader(BaseDownloader):
                 remove_images=self.remove_images_after_pdf,
                 title=title,
             )
+            pdf_path = str(pdf)
             artifacts.insert(0, DownloadArtifact(pdf, "pdf", pdf.stat().st_size))
         return DownloadResult(
             self.provider_name,
             title,
             tuple(artifacts),
-            {"folder": str(folder), "image_count": len(urls)},
+            {
+                "folder": str(folder),
+                "image_count": len(urls),
+                "pdf_created": bool(pdf_path),
+                "pdf_path": pdf_path,
+            },
         )
 
     async def _mangadex(self, chapter_id: str, root: Path) -> tuple[str, Path, list[str]]:

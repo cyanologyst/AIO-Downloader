@@ -20,11 +20,13 @@ from app.services.pornhub_model import is_pornhub_model_url, resolve_pornhub_mod
 from app.services.video_sites import (
     is_adult_video_url,
     is_hentai_video_url,
+    is_social_profile_url,
     platform_label,
     platform_slug,
     requires_deno_runtime,
     requires_generic_impersonation,
 )
+from app.services.browser_cookies import ensure_ytdlp_cookie_file
 from app.utils.paths import snapshot_files
 from app.utils.subprocess_utils import require_executable, subprocess_window_options, terminate_process
 from app.utils.runtime import is_bundled_tool
@@ -135,8 +137,19 @@ class YtdlpDownloader(BaseDownloader):
             "playlistend": 1,
             "http_headers": {"User-Agent": "Mozilla/5.0"},
         }
-        if self.cookies_file and Path(self.cookies_file).exists():
-            options["cookiefile"] = self.cookies_file
+        try:
+            cookie_file = ensure_ytdlp_cookie_file(self.cookies_file)
+        except RuntimeError as exc:
+            return {
+                "supported": False,
+                "recognized": bool(self._specific_extractor(url)),
+                "extractor": self._specific_extractor(url),
+                "title": "",
+                "requires_auth": True,
+                "reason": str(exc),
+            }
+        if cookie_file:
+            options["cookiefile"] = cookie_file
         if self.proxy:
             options["proxy"] = self.proxy
         try:
@@ -192,8 +205,9 @@ class YtdlpDownloader(BaseDownloader):
             "extractor_retries": 0,
             "http_headers": {"User-Agent": "Mozilla/5.0"},
         }
-        if self.cookies_file and Path(self.cookies_file).exists():
-            options["cookiefile"] = self.cookies_file
+        cookie_file = ensure_ytdlp_cookie_file(self.cookies_file)
+        if cookie_file:
+            options["cookiefile"] = cookie_file
         if self.proxy:
             options["proxy"] = self.proxy
         with yt_dlp.YoutubeDL(options) as ydl:
@@ -238,6 +252,7 @@ class YtdlpDownloader(BaseDownloader):
         extractor_lower = extractor.lower()
         return (
             "list=" in lowered
+            or is_social_profile_url(url)
             or any(token in extractor_lower for token in ("playlist", "channel", "user", "tab"))
             or any(
                 token in lowered
@@ -395,6 +410,7 @@ class YtdlpDownloader(BaseDownloader):
                 "items": item_states,
                 "batch_manifest_id": request.batch_manifest_id,
                 "platform": platform_label(urls[0]),
+                "thumbnail_url": request.thumbnail_url,
             },
         )
         self._cleanup_batch(context.job_id)
@@ -423,8 +439,9 @@ class YtdlpDownloader(BaseDownloader):
             "socket_timeout": 45,
             "http_headers": {"User-Agent": "Mozilla/5.0"},
         }
-        if self.cookies_file and Path(self.cookies_file).exists():
-            options["cookiefile"] = self.cookies_file
+        cookie_file = ensure_ytdlp_cookie_file(self.cookies_file)
+        if cookie_file:
+            options["cookiefile"] = cookie_file
         if self.proxy:
             options["proxy"] = self.proxy
         with yt_dlp.YoutubeDL(options) as ydl:
@@ -566,8 +583,9 @@ class YtdlpDownloader(BaseDownloader):
                 "--merge-output-format",
                 "mp4",
             ]
-        if self.cookies_file and Path(self.cookies_file).exists():
-            command += ["--cookies", self.cookies_file]
+        cookie_file = ensure_ytdlp_cookie_file(self.cookies_file)
+        if cookie_file:
+            command += ["--cookies", cookie_file]
         if self.proxy:
             command += ["--proxy", self.proxy]
         if requires_generic_impersonation(original_url):

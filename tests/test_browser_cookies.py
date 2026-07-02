@@ -2,10 +2,12 @@ from pathlib import Path
 
 from app.services import browser_cookies
 from app.services.browser_cookies import (
+    ensure_ytdlp_cookie_file,
     _friendly_cookie_error,
     _normalize_profile_path,
     _resolve_chromium_profile,
     _should_try_chromium_devtools_export,
+    is_browser_cookie_database_path,
 )
 
 
@@ -16,6 +18,20 @@ def test_normalize_chromium_cookie_database_path_to_profile():
     )
 
     assert profile.endswith(r"Google\Chrome\User Data\Default")
+
+
+def test_raw_browser_cookie_database_is_not_used_as_ytdlp_cookie_file(tmp_path):
+    database = tmp_path / "Default" / "Network" / "Cookies"
+    database.parent.mkdir(parents=True)
+    database.write_bytes(b"sqlite")
+
+    assert is_browser_cookie_database_path(str(database))
+    try:
+        ensure_ytdlp_cookie_file(str(database))
+    except RuntimeError as exc:
+        assert "browser database" in str(exc)
+    else:
+        raise AssertionError("raw browser cookie database should be rejected")
 
 
 def test_friendly_cookie_error_explains_locked_chrome_database():

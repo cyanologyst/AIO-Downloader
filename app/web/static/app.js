@@ -782,13 +782,14 @@ function downloadRow(job, index) {
   const active = !terminalStatuses.has(job.status);
   const icon = sourceIcon(job.provider, job.request.type);
   const iconClass = sourceIconClass(job.provider, job.request.type);
+  const badge = sourceBadge(job, icon, iconClass);
   const detail = active
     ? `${formatBytes(job.downloaded_bytes)} / ${job.total_bytes ? formatBytes(job.total_bytes) : "—"} · ${formatBytes(job.speed_bytes)}/s`
     : sourceLabel(job);
   return `<article class="download-row${expanded ? " expanded" : ""}" data-id="${escapeHtml(job.id)}" style="animation-delay:${Math.min(index * 24, 180)}ms">
     <button class="download-summary" type="button" data-expand="${escapeHtml(job.id)}" aria-expanded="${expanded}" aria-label="Toggle details for ${escapeHtml(job.title)}">
       <span class="download-identity">
-        <span class="source-icon ${iconClass}"><i class="${icon}"></i></span>
+        ${badge}
         <span class="download-copy">
           <strong data-job-title>${escapeHtml(job.title)}</strong>
           <small data-job-detail>${escapeHtml(detail)}</small>
@@ -819,6 +820,9 @@ function activeJobDetails(job) {
             <button class="job-action resume-batch-button" type="button" data-id="${job.id}">
               <i class="ti ti-player-play"></i>Resume remaining
             </button>
+            <button class="job-action danger" type="button" data-delete-job="${job.id}">
+              <i class="ti ti-trash"></i>Delete task
+            </button>
           </span>
         </div>
         <div class="batch-children" data-batch-children data-items-signature="${escapeHtml(batchItemsSignature(job))}">${batchChildren(job)}</div>`;
@@ -836,6 +840,9 @@ function activeJobDetails(job) {
           <button class="job-action danger" type="button" data-id="${job.id}" data-action="cancel">
             <i class="ti ti-x"></i>Cancel remaining
           </button>
+          <button class="job-action danger" type="button" data-delete-job="${job.id}">
+            <i class="ti ti-trash"></i>Delete task
+          </button>
         </span>
       </div>
       <div class="batch-children" data-batch-children data-items-signature="${escapeHtml(batchItemsSignature(job))}">${batchChildren(job)}</div>`;
@@ -850,6 +857,9 @@ function activeJobDetails(job) {
         <button class="job-action danger" type="button" data-id="${job.id}" data-action="cancel">
           <i class="ti ti-x"></i>Cancel
         </button>
+        <button class="job-action danger" type="button" data-delete-job="${job.id}">
+          <i class="ti ti-trash"></i>Delete task
+        </button>
       </span>
     </div>`;
 }
@@ -858,6 +868,10 @@ function finishedJobDetails(job) {
   const message = job.output_path || job.error || "No additional details.";
   const canResumeBatch = job.metadata?.batch
     && (job.metadata?.items || []).some((item) => !["completed", "skipped"].includes(item.status));
+  const canCreatePdf = job.provider === "gallery"
+    && job.metadata?.folder
+    && !job.metadata?.pdf_created
+    && !String(job.output_path || "").toLowerCase().endsWith(".pdf");
   const outputActions = job.output_path ? `
       <button class="job-action" type="button" data-copy-path="${escapeHtml(job.output_path)}"><i class="ti ti-copy"></i>Copy path</button>
       <button class="job-action" type="button" data-open-path="${escapeHtml(job.output_path)}"><i class="ti ti-folder-open"></i>Open folder</button>` : "";
@@ -868,7 +882,8 @@ function finishedJobDetails(job) {
       ${outputActions}
       ${canResumeBatch ? `<button class="job-action resume-batch-button" type="button" data-id="${job.id}"><i class="ti ti-player-play"></i>Resume remaining</button>` : ""}
       ${job.metadata?.failed_count ? `<button class="job-action retry-failed-button" type="button" data-id="${job.id}"><i class="ti ti-refresh"></i>Retry ${job.metadata.failed_count} failed</button>` : ""}
-      ${job.provider === "gallery" && job.metadata?.folder ? `<button class="job-action pdf-button" type="button" data-folder="${escapeHtml(job.metadata.folder)}"><i class="ti ti-file-type-pdf"></i>Create PDF</button>` : ""}
+      ${canCreatePdf ? `<button class="job-action pdf-button" type="button" data-folder="${escapeHtml(job.metadata.folder)}"><i class="ti ti-file-type-pdf"></i>Create PDF</button>` : ""}
+      <button class="job-action danger" type="button" data-delete-job="${job.id}"><i class="ti ti-trash"></i>Delete task</button>
     </span>
   </div>
   ${job.metadata?.batch ? `<div class="batch-children" data-batch-children data-items-signature="${escapeHtml(batchItemsSignature(job))}">${batchChildren(job)}</div>` : ""}`;
@@ -891,6 +906,12 @@ function handleDownloadListClick(event) {
   if (openPathButton) {
     event.stopPropagation();
     openPath(openPathButton.dataset.openPath);
+    return;
+  }
+  const deleteButton = event.target.closest("[data-delete-job]");
+  if (deleteButton) {
+    event.stopPropagation();
+    deleteJob(deleteButton.dataset.deleteJob);
     return;
   }
   const pdf = event.target.closest(".pdf-button");
@@ -963,6 +984,28 @@ async function openPath(path) {
       body: JSON.stringify({ path }),
     });
     toast("Opened output folder");
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function deleteJob(id) {
+  const job = state.jobs.find((item) => item.id === id);
+  const active = job && !terminalStatuses.has(job.status);
+  const confirmed = await confirmAction({
+    title: active ? "Cancel and delete this task?" : "Delete this task?",
+    message: active
+      ? "This stops the running download and removes only this row from the list. Downloaded files are not deleted."
+      : "This removes only this row from the list. Downloaded files are not deleted.",
+    confirmLabel: active ? "Cancel and delete" : "Delete task",
+    danger: true,
+  });
+  if (!confirmed) return;
+  try {
+    await api(`/api/downloads/${id}`, { method: "DELETE" });
+    state.expandedJobs.delete(id);
+    toast("Download task deleted");
+    await refreshJobs();
   } catch (error) {
     toast(error.message, true);
   }
@@ -1612,6 +1655,20 @@ function sourceIcon(provider, requestedType) {
   if (provider === "aria2") return "ti ti-file";
   if (requestedType === "audio") return "ti ti-music";
   return "ti ti-brand-youtube";
+}
+
+function sourceBadge(job, icon, iconClass) {
+  const avatar = String(job.metadata?.thumbnail_url || "").trim();
+  if (!avatar) {
+    return `<span class="source-icon ${escapeHtml(iconClass)}"><i class="${escapeHtml(icon)}"></i></span>`;
+  }
+  const source = /^https?:\/\//i.test(avatar)
+    ? `/api/ytdlp/thumbnail?url=${encodeURIComponent(job.request?.url || "")}&thumbnail=${encodeURIComponent(avatar)}`
+    : avatar;
+  return `<span class="source-icon ${escapeHtml(iconClass)} profile-avatar">
+    <img src="${escapeHtml(source)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="fallbackBatchThumbnail(this)">
+    <i class="${escapeHtml(icon)}"></i>
+  </span>`;
 }
 
 function sourceIconClass(provider, requestedType) {

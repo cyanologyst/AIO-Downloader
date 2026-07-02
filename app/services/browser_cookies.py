@@ -81,6 +81,45 @@ def export_browser_cookies(browser: str, profile: str = "") -> dict[str, object]
     return _save_cookie_jar(browser, profile, jar)
 
 
+def export_browser_cookie_database(cookie_database: str) -> dict[str, object]:
+    path = Path(cookie_database).expanduser()
+    browser = _browser_from_cookie_database_path(path)
+    if not browser:
+        raise RuntimeError(
+            "This looks like a browser cookie database, but AIO Downloader could not detect "
+            "which browser/profile owns it. Use Fetch cookies and choose the browser profile instead."
+        )
+    profile = str(path.parent) if browser == "firefox" and path.name.lower() == "cookies.sqlite" else str(path)
+    return export_browser_cookies(browser, profile)
+
+
+def is_browser_cookie_database_path(value: str) -> bool:
+    if not value:
+        return False
+    path = Path(value).expanduser()
+    name = path.name.lower()
+    parent = path.parent.name.lower()
+    return (
+        (name == "cookies" and parent == "network")
+        or name == "cookies.sqlite"
+        or name.endswith(".sqlite")
+    )
+
+
+def ensure_ytdlp_cookie_file(value: str) -> str:
+    if not value:
+        return ""
+    path = Path(value).expanduser()
+    if not path.exists():
+        return ""
+    if is_browser_cookie_database_path(str(path)):
+        raise RuntimeError(
+            "The selected cookie path is a browser database, not a yt-dlp/Netscape cookies.txt file. "
+            "Use Fetch cookies to export a compatible file, or select an exported cookies.txt file."
+        )
+    return str(path.resolve())
+
+
 def export_chromium_cookies_via_devtools(browser: str, profile: str = "") -> dict[str, object]:
     browser = browser.strip().lower()
     if browser not in CHROMIUM_BROWSERS:
@@ -293,6 +332,24 @@ def _resolve_chromium_profile(browser: str, profile: str) -> tuple[Path, str]:
         "vivaldi": local / "Vivaldi" / "User Data",
     }
     return roots.get(browser, local), "Default"
+
+
+def _browser_from_cookie_database_path(path: Path) -> str:
+    lowered = [part.lower() for part in path.resolve().parts]
+    joined = "\\".join(lowered)
+    if "google\\chrome\\user data" in joined:
+        return "chrome"
+    if "microsoft\\edge\\user data" in joined:
+        return "edge"
+    if "bravesoftware\\brave-browser\\user data" in joined:
+        return "brave"
+    if "vivaldi\\user data" in joined:
+        return "vivaldi"
+    if "chromium\\user data" in joined:
+        return "chromium"
+    if "mozilla\\firefox\\profiles" in joined:
+        return "firefox"
+    return ""
 
 
 def _clone_chromium_user_data_for_cookie_export(source_user_data_dir: Path, profile_name: str) -> Path:

@@ -46,3 +46,14 @@ def test_request_accepts_selected_batch_items():
     )
     assert request.batch_item_titles == ("One", "Two")
     assert request.batch_item_thumbnails == ("https://img.example.com/1.jpg", "")
+
+
+def test_request_accepts_profile_thumbnail_url():
+    request = DownloadRequest.from_dict(
+        {
+            "url": "https://www.instagram.com/example/",
+            "thumbnail_url": "https://img.example.com/avatar.jpg",
+        }
+    )
+
+    assert request.thumbnail_url == "https://img.example.com/avatar.jpg"

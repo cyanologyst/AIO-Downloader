@@ -70,6 +70,27 @@ def test_probe_marks_hanime_playlist_for_review():
     assert result["batch_candidate"] is True
 
 
+def test_social_profile_urls_are_batch_candidates(monkeypatch):
+    downloader = YtdlpDownloader("yt-dlp", "ffmpeg")
+    monkeypatch.setattr(downloader, "_specific_extractor", lambda _url: "Instagram")
+    monkeypatch.setattr(
+        downloader,
+        "_probe_flat_batch_sync",
+        lambda _url: {
+            "supported": True,
+            "extractor": "Instagram",
+            "title": "example",
+            "batch_candidate": True,
+            "item_count_hint": 2,
+        },
+    )
+
+    result = asyncio.run(downloader.probe("https://www.instagram.com/example/"))
+
+    assert result["supported"] is True
+    assert result["batch_candidate"] is True
+
+
 def test_probe_reports_authentication_block(monkeypatch):
     downloader = YtdlpDownloader("yt-dlp", "ffmpeg")
     monkeypatch.setattr(

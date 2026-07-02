@@ -15,7 +15,8 @@ import yt_dlp
 
 from app.services.hentai_playlist import is_hentai_playlist_url, resolve_hentai_playlist
 from app.services.pornhub_model import is_pornhub_model_url, resolve_pornhub_model_playlist
-from app.services.video_sites import platform_label
+from app.services.video_sites import platform_label, social_profile_info
+from app.services.browser_cookies import ensure_ytdlp_cookie_file
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +38,7 @@ class BatchManifest:
     items: tuple[BatchItem, ...]
     created_at: str
     free_bytes: int | None = None
+    thumbnail_url: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -64,6 +66,7 @@ class BatchManifestService:
         self.path.mkdir(parents=True, exist_ok=True)
 
     async def inspect(self, url: str) -> BatchManifest:
+        thumbnail_url: str | None = None
         if is_hentai_playlist_url(url):
             playlist = await resolve_hentai_playlist(url)
             items = tuple(
@@ -106,7 +109,7 @@ class BatchManifestService:
             )
             title, provider = playlist.title, "PornHub"
         else:
-            title, provider, items = await asyncio.to_thread(self._inspect_ytdlp, url)
+            title, provider, items, thumbnail_url = await asyncio.to_thread(self._inspect_ytdlp, url)
         if len(items) < 2:
             raise ValueError("This URL did not resolve to a multi-item playlist or profile.")
         manifest = BatchManifest(
@@ -117,6 +120,7 @@ class BatchManifestService:
             items=items,
             created_at=datetime.now(timezone.utc).isoformat(),
             free_bytes=self._free_bytes(),
+            thumbnail_url=thumbnail_url,
         )
         self.save(manifest)
         return manifest
@@ -135,6 +139,7 @@ class BatchManifestService:
                 items=tuple(BatchItem(**item) for item in data.get("items") or []),
                 created_at=str(data["created_at"]),
                 free_bytes=data.get("free_bytes"),
+                thumbnail_url=data.get("thumbnail_url"),
             )
         except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
             return None
@@ -157,7 +162,7 @@ class BatchManifestService:
             raise ValueError("Select at least one batch item.")
         return manifest, selected
 
-    def _inspect_ytdlp(self, url: str) -> tuple[str, str, tuple[BatchItem, ...]]:
+    def _inspect_ytdlp(self, url: str) -> tuple[str, str, tuple[BatchItem, ...], str | None]:
         options: dict[str, object] = {
             "quiet": True,
             "no_warnings": True,
@@ -166,8 +171,9 @@ class BatchManifestService:
             "socket_timeout": 30,
             "http_headers": {"User-Agent": "Mozilla/5.0"},
         }
-        if self.cookies_file and Path(self.cookies_file).exists():
-            options["cookiefile"] = self.cookies_file
+        cookie_file = ensure_ytdlp_cookie_file(self.cookies_file)
+        if cookie_file:
+            options["cookiefile"] = cookie_file
         if self.proxy:
             options["proxy"] = self.proxy
         try:
@@ -195,11 +201,13 @@ class BatchManifestService:
                     thumbnail_url=self._thumbnail_url(entry, item_url),
                 )
             )
-        return (
-            str(info.get("title") or "Batch download"),
-            str(info.get("extractor_key") or platform_label(url)),
-            tuple(items),
-        )
+        profile = social_profile_info(url)
+        provider = str(info.get("extractor_key") or platform_label(url))
+        title = str(info.get("title") or "Batch download")
+        if profile:
+            provider = profile.platform
+            title = f"{profile.username} ({profile.platform})"
+        return (title, provider, tuple(items), self._manifest_thumbnail_url(info))
 
     def _free_bytes(self) -> int | None:
         try:
@@ -220,6 +228,21 @@ class BatchManifestService:
         video_id = str(entry.get("id") or "").strip() or BatchManifestService._youtube_video_id(item_url)
         if video_id and BatchManifestService._is_youtube_url(item_url):
             return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+        return None
+
+    @staticmethod
+    def _manifest_thumbnail_url(info: dict[str, Any]) -> str | None:
+        for key in ("thumbnail", "uploader_thumbnail", "channel_thumbnail", "avatar"):
+            value = str(info.get(key) or "").strip()
+            if value.startswith(("http://", "https://")):
+                return value
+        thumbnails = info.get("thumbnails")
+        if isinstance(thumbnails, list):
+            for entry in reversed(thumbnails):
+                if isinstance(entry, dict):
+                    value = str(entry.get("url") or "").strip()
+                    if value.startswith(("http://", "https://")):
+                        return value
         return None
 
     @staticmethod

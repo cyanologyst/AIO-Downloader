@@ -27,7 +27,13 @@ from app.downloaders.ytdlp_downloader import YtdlpDownloader
 from app.models import DownloadRequest
 from app.services.job_service import JobService
 from app.services.batch_manifest import BatchManifestService
-from app.services.browser_cookies import export_browser_cookies, supported_cookie_browsers
+from app.services.browser_cookies import (
+    export_browser_cookie_database,
+    export_browser_cookies,
+    ensure_ytdlp_cookie_file,
+    is_browser_cookie_database_path,
+    supported_cookie_browsers,
+)
 from app.services.pdf_service import convert_folder_to_pdf
 from app.services.tool_installer import UPDATABLE_TOOLS, install_missing_tools, tool_health
 from app.services.video_sites import SUPPORTED_VIDEO_SITES, host as video_host, matches_domain
@@ -65,7 +71,7 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
         settings.ytdlp_proxy,
         settings.deno_bin,
     )
-    spotify = SpotifyDownloader(settings.spotdl_bin, settings.ffmpeg_bin)
+    spotify = SpotifyDownloader(settings.spotdl_bin, settings.ffmpeg_bin, settings.ytdlp_cookies_file)
     gallery = GalleryDownloader(settings.manga_remove_images_after_pdf)
     registry = DownloaderRegistry([spotify, gallery, aria2, ytdlp])
     jobs = JobService(registry, store)
@@ -90,6 +96,7 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
         ytdlp.deno_bin = current.deno_bin
         spotify.binary = current.spotdl_bin
         spotify.ffmpeg = current.ffmpeg_bin
+        spotify.cookies_file = current.ytdlp_cookies_file
         batches.cookies_file = current.ytdlp_cookies_file
         batches.proxy = current.ytdlp_proxy
         batches.download_dir = current.download_path
@@ -120,8 +127,9 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
             "socket_timeout": 20,
             "http_headers": {"User-Agent": "Mozilla/5.0"},
         }
-        if ytdlp.cookies_file and Path(ytdlp.cookies_file).exists():
-            options["cookiefile"] = ytdlp.cookies_file
+        cookie_file = ensure_ytdlp_cookie_file(ytdlp.cookies_file)
+        if cookie_file:
+            options["cookiefile"] = cookie_file
         if ytdlp.proxy:
             options["proxy"] = ytdlp.proxy
         thumbnail = ""
@@ -223,6 +231,7 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
             httpx.HTTPError,
             OSError,
             ValueError,
+            RuntimeError,
         ) as exc:
             return _error(str(exc), 404)
 
@@ -256,11 +265,12 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
             return _error("path is required", 400)
         current = store.get()
         try:
-            target = safe_existing_path(current.download_path, str(payload["path"]))
-            if not target.exists():
+            target = _resolve_openable_path(current.download_path, str(payload["path"]), jobs.list_jobs())
+            open_target = target if target.exists() else target.parent
+            if not open_target.exists():
                 return _error("Path was not found", 404)
-            _open_in_file_manager(target)
-            return jsonify({"opened": str(target)})
+            _open_in_file_manager(open_target)
+            return jsonify({"opened": str(open_target)})
         except (ValueError, OSError) as exc:
             return _error(str(exc), 400)
 
@@ -293,6 +303,12 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
             return _error("Job not found", 404)
         jobs.cancel(job_id)
         return jsonify({"job": jobs.get_job(job_id)})
+
+    @app.delete("/api/downloads/<job_id>")
+    def delete_download(job_id: str):
+        if not jobs.delete(job_id):
+            return _error("Job not found", 404)
+        return jsonify({"deleted": job_id})
 
     @app.post("/api/downloads/<job_id>/skip")
     def skip_download(job_id: str):
@@ -348,11 +364,12 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
                     "batch_item_thumbnails": [
                         item.thumbnail_url or "" for item in selected
                     ],
+                    "thumbnail_url": manifest.thumbnail_url or "",
                     "batch_continue_on_error": bool(payload.get("continue_on_error", True)),
                 }
             )
             return jsonify({"job": jobs.start(download_request).to_dict()}), 202
-        except (ValueError, TypeError, OSError) as exc:
+        except (ValueError, TypeError, OSError, RuntimeError) as exc:
             return _error(str(exc), 400)
 
     @app.get("/api/settings")
@@ -365,12 +382,18 @@ def create_app(settings_store: SettingsStore | None = None) -> Flask:
         if not isinstance(payload, dict):
             return _error("JSON object is required", 400)
         try:
+            cookie_file = str(payload.get("ytdlp_cookies_file") or "").strip()
+            if cookie_file and is_browser_cookie_database_path(cookie_file):
+                payload = dict(payload)
+                payload["ytdlp_cookies_file"] = str(
+                    export_browser_cookie_database(cookie_file)["path"]
+                )
             updated = store.update(payload)
             jobs.update_limit(updated.max_concurrent_downloads)
             sync_runtime_settings()
             resolve_thumbnail.cache_clear()
             return jsonify(updated.public_dict())
-        except (ValueError, TypeError, OSError) as exc:
+        except (ValueError, TypeError, OSError, RuntimeError) as exc:
             return _error(str(exc), 400)
 
     @app.post("/api/torrents/inspect")
@@ -618,6 +641,25 @@ def _open_in_file_manager(target: Path) -> None:
     else:
         command = ["xdg-open", str(target.parent if target.is_file() else target)]
     subprocess.Popen(command, **subprocess_window_options())
+
+
+def _resolve_openable_path(root: Path, value: str, records: list[dict[str, Any]]) -> Path:
+    try:
+        return safe_existing_path(root, value)
+    except ValueError:
+        candidate = Path(value).expanduser().resolve()
+        known_paths: set[Path] = set()
+        for job in records:
+            output_path = job.get("output_path")
+            if output_path:
+                known_paths.add(Path(str(output_path)).expanduser().resolve())
+            metadata = job.get("metadata") if isinstance(job.get("metadata"), dict) else {}
+            for key in ("folder", "pdf_path"):
+                if metadata.get(key):
+                    known_paths.add(Path(str(metadata[key])).expanduser().resolve())
+        if candidate in known_paths or any(candidate == known.parent for known in known_paths):
+            return candidate
+        raise
 
 
 def _error_response(message: str, status: int):

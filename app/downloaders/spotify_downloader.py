@@ -10,6 +10,7 @@ from app.models import DownloadArtifact, DownloadRequest, DownloadResult
 from app.utils.paths import snapshot_files
 from app.utils.subprocess_utils import require_executable, subprocess_window_options, terminate_process
 from app.utils.runtime import is_bundled_tool
+from app.services.browser_cookies import ensure_ytdlp_cookie_file
 
 SPOTIFY_RE = re.compile(
     r"https?://open\.spotify\.com/(?:intl-[a-z]{2}/)?"
@@ -21,9 +22,10 @@ SPOTIFY_RE = re.compile(
 class SpotifyDownloader(BaseDownloader):
     provider_name = "spotify"
 
-    def __init__(self, binary: str, ffmpeg: str) -> None:
+    def __init__(self, binary: str, ffmpeg: str, cookies_file: str = "") -> None:
         self.binary = binary
         self.ffmpeg = ffmpeg
+        self.cookies_file = cookies_file
         self._processes: dict[str, asyncio.subprocess.Process] = {}
 
     async def can_handle(self, url: str) -> bool:
@@ -50,6 +52,9 @@ class SpotifyDownloader(BaseDownloader):
         ]
         if self.ffmpeg:
             command += ["--ffmpeg", self.ffmpeg]
+        cookie_file = ensure_ytdlp_cookie_file(self.cookies_file)
+        if cookie_file:
+            command += ["--cookie-file", cookie_file]
         process = await asyncio.create_subprocess_exec(
             *command,
             stdout=asyncio.subprocess.PIPE,

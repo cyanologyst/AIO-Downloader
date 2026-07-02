@@ -58,6 +58,7 @@ class JobService:
                     "total_items": len(request.batch_items),
                     "completed_items": 0,
                     "failed_count": 0,
+                    "thumbnail_url": request.thumbnail_url,
                     "items": [
                         {
                             "index": index,
@@ -266,6 +267,21 @@ class JobService:
             if finished:
                 self._notify_locked()
             return len(finished)
+
+    def delete(self, job_id: str) -> bool:
+        job = self._get(job_id)
+        if not job:
+            return False
+        if job.status not in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
+            self.cancel(job_id)
+        with self._lock:
+            removed = self.jobs.pop(job_id, None)
+            self._cancelled.discard(job_id)
+            self._providers.pop(job_id, None)
+            self._tasks.pop(job_id, None)
+            if removed:
+                self._notify_locked()
+            return bool(removed)
 
     def _control(self, job_id: str, action: str) -> bool:
         provider = self._providers.get(job_id)

@@ -25,6 +25,7 @@ class DownloadRequest:
     batch_item_titles: tuple[str, ...] = ()
     batch_item_thumbnails: tuple[str, ...] = ()
     batch_continue_on_error: bool = True
+    thumbnail_url: str = ""
     destination: Path | None = None
 
     @classmethod
@@ -77,4 +78,9 @@ class DownloadRequest:
                 for value in (data.get("batch_item_thumbnails") or [])
             ),
             batch_continue_on_error=bool(data.get("batch_continue_on_error", True)),
+            thumbnail_url=(
+                str(data.get("thumbnail_url") or "").strip()
+                if str(data.get("thumbnail_url") or "").strip().startswith(("http://", "https://", "/"))
+                else ""
+            ),
         )
