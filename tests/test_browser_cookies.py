@@ -52,6 +52,11 @@ def test_resolve_chromium_profile_from_cookie_database_path():
 
 
 def test_devtools_cookie_export_saves_cookie_jar(monkeypatch, tmp_path):
+    profile_dir = tmp_path / "Default"
+    cookie_dir = profile_dir / "Network"
+    cookie_dir.mkdir(parents=True)
+    (cookie_dir / "Cookies").write_bytes(b"placeholder")
+
     monkeypatch.setattr(browser_cookies, "_chromium_executable", lambda _browser: Path("C:/Chrome/chrome.exe"))
     monkeypatch.setattr(browser_cookies, "_resolve_chromium_profile", lambda _browser, _profile: (tmp_path, "Default"))
     monkeypatch.setattr(browser_cookies, "_free_local_port", lambda: 9222)

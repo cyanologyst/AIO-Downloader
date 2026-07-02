@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import re
 import json
+import shutil
 import socket
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -89,19 +91,23 @@ def export_chromium_cookies_via_devtools(browser: str, profile: str = "") -> dic
         label = BROWSER_LABELS.get(browser, browser.title())
         raise RuntimeError(f"Could not find {label}. Install it or choose a different browser.")
 
-    user_data_dir, profile_name = _resolve_chromium_profile(browser, profile)
-    if not user_data_dir.exists():
-        raise RuntimeError(f"Could not find Chromium user data directory: {user_data_dir}")
+    source_user_data_dir, profile_name = _resolve_chromium_profile(browser, profile)
+    if not source_user_data_dir.exists():
+        raise RuntimeError(f"Could not find Chromium user data directory: {source_user_data_dir}")
 
+    temp_user_data_dir = _clone_chromium_user_data_for_cookie_export(source_user_data_dir, profile_name)
     port = _free_local_port()
     command = [
         str(executable),
         f"--remote-debugging-port={port}",
         "--remote-debugging-address=127.0.0.1",
-        f"--user-data-dir={user_data_dir}",
+        f"--user-data-dir={temp_user_data_dir}",
         f"--profile-directory={profile_name}",
+        "--remote-allow-origins=*",
         "--no-first-run",
         "--no-default-browser-check",
+        "--disable-background-networking",
+        "--disable-sync",
         "about:blank",
     ]
     process = subprocess.Popen(command)
@@ -130,6 +136,7 @@ def export_chromium_cookies_via_devtools(browser: str, profile: str = "") -> dic
                 process.kill()
             except Exception:
                 pass
+        shutil.rmtree(temp_user_data_dir, ignore_errors=True)
 
 
 @contextmanager
@@ -288,6 +295,94 @@ def _resolve_chromium_profile(browser: str, profile: str) -> tuple[Path, str]:
     return roots.get(browser, local), "Default"
 
 
+def _clone_chromium_user_data_for_cookie_export(source_user_data_dir: Path, profile_name: str) -> Path:
+    temp_user_data_dir = Path(tempfile.mkdtemp(prefix="aio-chrome-cookie-export-"))
+    source_user_data_dir = source_user_data_dir.resolve()
+    source_profile_dir = source_user_data_dir / profile_name
+    target_profile_dir = temp_user_data_dir / profile_name
+
+    if not source_profile_dir.exists():
+        shutil.rmtree(temp_user_data_dir, ignore_errors=True)
+        raise RuntimeError(f"Could not find Chromium profile directory: {source_profile_dir}")
+
+    try:
+        _copy_file_if_exists(source_user_data_dir / "Local State", temp_user_data_dir / "Local State")
+        _copy_chromium_profile(source_profile_dir, target_profile_dir)
+        _copy_chromium_cookie_database(source_profile_dir, target_profile_dir)
+    except Exception:
+        shutil.rmtree(temp_user_data_dir, ignore_errors=True)
+        raise
+
+    return temp_user_data_dir
+
+
+def _copy_chromium_profile(source: Path, target: Path) -> None:
+    heavy_or_noisy_dirs = {
+        "blob_storage",
+        "cache",
+        "code cache",
+        "crashpad",
+        "databases",
+        "dawncache",
+        "file system",
+        "gpucache",
+        "grshadercache",
+        "indexeddb",
+        "local storage",
+        "optimization hints",
+        "safe browsing",
+        "service worker",
+        "session storage",
+        "sessions",
+        "shared dictionary",
+        "storage",
+        "webrtc logs",
+    }
+
+    lock_or_live_files = {"lock", "singletoncookie", "singletonlock", "singletonsocket"}
+
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        ignored = {name for name in names if name.lower() in heavy_or_noisy_dirs | lock_or_live_files}
+        if Path(directory).name.lower() == "network":
+            ignored.update(name for name in names if name.lower() in {"cookies", "cookies-journal"})
+        return ignored
+
+    shutil.copytree(source, target, ignore=ignore)
+
+
+def _copy_chromium_cookie_database(source_profile_dir: Path, target_profile_dir: Path) -> None:
+    source_cookie_db = source_profile_dir / "Network" / "Cookies"
+    if not source_cookie_db.exists():
+        return
+    target_cookie_db = target_profile_dir / "Network" / "Cookies"
+    target_cookie_db.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copy2(source_cookie_db, target_cookie_db)
+    except OSError:
+        _sqlite_backup_copy(source_cookie_db, target_cookie_db)
+    _copy_file_if_exists(source_profile_dir / "Network" / "Cookies-journal", target_profile_dir / "Network" / "Cookies-journal")
+
+
+def _copy_file_if_exists(source: Path, target: Path) -> None:
+    if source.exists():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+
+
+def _sqlite_backup_copy(source: Path, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    uri = f"{source.resolve().as_uri()}?mode=ro&immutable=1"
+    source_connection = sqlite3.connect(uri, uri=True)
+    try:
+        target_connection = sqlite3.connect(str(target))
+        try:
+            source_connection.backup(target_connection)
+        finally:
+            target_connection.close()
+    finally:
+        source_connection.close()
+
+
 def _free_local_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -307,8 +402,9 @@ def _wait_for_devtools_websocket(port: int, timeout: float = 15.0) -> str:
             last_error = exc
         time.sleep(0.25)
     raise RuntimeError(
-        "Could not connect to Chrome DevTools. Close all Chrome windows for this profile, "
-        "then fetch cookies again so AIO Downloader can launch Chrome with cookie-export access."
+        "Could not connect to the temporary Chrome cookie bridge. AIO Downloader copied your "
+        "Chrome profile to a temporary folder, but Chrome did not expose the local DevTools "
+        "socket in time. Retry once; if it still fails, use Firefox or a Netscape cookies.txt export."
     ) from last_error
 
 
