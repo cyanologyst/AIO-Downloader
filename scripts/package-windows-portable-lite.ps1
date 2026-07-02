@@ -14,6 +14,10 @@ if (-not (Test-Path -LiteralPath $IconPath)) {
 
 $DistPath = "dist\windows-portable-lite"
 $WorkPath = "build\pyinstaller-portable-lite"
+$WebViewLib = python -c "import pathlib, webview; print(pathlib.Path(webview.__file__).resolve().parent / 'lib')"
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $WebViewLib)) {
+  throw "Could not locate pywebview lib directory."
+}
 
 $PyInstallerArgs = @(
   "--noconfirm",
@@ -39,6 +43,11 @@ $PyInstallerArgs = @(
   "--add-data", "$RootPath\app\web\templates;app\web\templates",
   "--add-data", "$RootPath\app\web\static;app\web\static",
   "--add-data", "$RootPath\assets;assets",
+  "--add-binary", "$WebViewLib\Microsoft.Web.WebView2.Core.dll;.",
+  "--add-binary", "$WebViewLib\Microsoft.Web.WebView2.WinForms.dll;.",
+  "--add-binary", "$WebViewLib\runtimes\win-x64\native\WebView2Loader.dll;win-x64",
+  "--add-binary", "$WebViewLib\runtimes\win-x86\native\WebView2Loader.dll;win-x86",
+  "--add-binary", "$WebViewLib\runtimes\win-arm64\native\WebView2Loader.dll;win-arm64",
   "app\launcher.py"
 )
 

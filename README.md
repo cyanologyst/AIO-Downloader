@@ -177,8 +177,9 @@ Windows ships as a native **setup executable**:
 
 - one `AIO-Downloader-Setup-vX.Y.Z.exe` file;
 - installs the desktop app under the current user profile;
-- bundles Python, app libraries, `yt-dlp`, `spotDL`, `aria2c`, `ffmpeg`,
-  `ffprobe`, and Deno;
+- bundles Python, app libraries, and built-in `yt-dlp` / `spotDL` launchers;
+- downloads and configures missing `aria2c`, `ffmpeg`/`ffprobe`, and Deno into
+  the app tools folder on first launch;
 - installs Microsoft Edge WebView2 Runtime automatically when it is missing;
 - creates Start Menu / optional desktop shortcuts and a normal uninstaller.
 
@@ -187,6 +188,10 @@ Windows setup command:
 ```powershell
 .\scripts\package-windows-setup.ps1 -Version 1.0.0 -RebuildBundle
 ```
+
+Use `-Offline` when you intentionally want a larger setup that bundles
+`aria2c`, `ffmpeg`/`ffprobe`, and Deno instead of downloading them on first
+launch.
 
 The setup build generates branded Inno Setup wizard artwork automatically and
 uses the app icon, custom welcome/finish copy, and a short installer page that

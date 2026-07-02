@@ -139,26 +139,33 @@ begin
     ProductPage,
     4,
     '✓',
-    'Ready-to-use downloader runtime',
-    'Installs the Windows app, Python runtime, app libraries, yt-dlp, spotDL, aria2c, ffmpeg/ffprobe, and Deno.'
+    'App runtime included',
+    'Installs the Windows app, Python runtime, app libraries, and built-in yt-dlp / spotDL launchers.'
   );
   AddInfoLine(
     ProductPage,
     68,
+    '✓',
+    'Tools install themselves',
+    'If aria2c, ffmpeg/ffprobe, or Deno are missing, AIO Downloader downloads them into its own tools folder on first launch.'
+  );
+  AddInfoLine(
+    ProductPage,
+    132,
     '✓',
     'Native desktop shell',
     'AIO Downloader opens as its own app window with custom controls instead of a browser tab.'
   );
   AddInfoLine(
     ProductPage,
-    132,
+    196,
     '✓',
     'Local user data',
     'Settings, logs, queue history, and WebView data stay under your Windows user profile.'
   );
   AddInfoLine(
     ProductPage,
-    196,
+    260,
     '!',
     'First-launch trust note',
     'This build is currently unsigned, so Windows SmartScreen may warn until a code-signing certificate is added.'

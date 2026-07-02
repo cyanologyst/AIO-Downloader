@@ -1,6 +1,7 @@
 param(
   [string]$Version = "1.0.0",
-  [switch]$RebuildBundle
+  [switch]$RebuildBundle,
+  [switch]$Offline
 )
 
 $ErrorActionPreference = "Stop"
@@ -46,9 +47,14 @@ function Find-Iscc {
   throw "Inno Setup 6 was not found. Install it with: winget install --id JRSoftware.InnoSetup -e"
 }
 
-$PackageDir = Join-Path $Root "dist\AIO-Downloader-Windows-v$Version"
+$PackageDir = if ($Offline) {
+  Join-Path $Root "dist\AIO-Downloader-Windows-v$Version"
+} else {
+  Join-Path $Root "dist\AIO-Downloader-Windows-Portable-Lite-v$Version"
+}
 if ($RebuildBundle -or -not (Test-Path -LiteralPath (Join-Path $PackageDir "AIO Downloader\AIO Downloader.exe"))) {
-  powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\package-windows-bundle.ps1") -Version $Version
+  $bundleScript = if ($Offline) { "scripts\package-windows-bundle.ps1" } else { "scripts\package-windows-portable-lite.ps1" }
+  powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root $bundleScript) -Version $Version
   if ($LASTEXITCODE -ne 0) {
     throw "Windows bundle build failed with exit code $LASTEXITCODE"
   }

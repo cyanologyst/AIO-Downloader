@@ -5,6 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $Root
+$IconPath = Join-Path $Root "aio_downloader_icon_windows.ico"
 
 $Out = Join-Path $Root $OutputDir
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
@@ -91,13 +92,29 @@ $small = [System.Drawing.Bitmap]::new(55, 55)
 $g = [System.Drawing.Graphics]::FromImage($small)
 $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
 $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::ClearTypeGridFit
-$smallRect = [System.Drawing.Rectangle]::new(0, 0, 55, 55)
-$smallGradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new($smallRect, [System.Drawing.ColorTranslator]::FromHtml("#061018"), [System.Drawing.ColorTranslator]::FromHtml("#10252D"), 45)
-$g.FillRectangle($smallGradient, $smallRect)
-$smallGradient.Dispose()
-$g.FillEllipse((New-Brush "#B2FF00"), 11, 13, 12, 12)
-$g.DrawString("AIO", [System.Drawing.Font]::new("Segoe UI", 12, [System.Drawing.FontStyle]::Bold), (New-Brush "#B2FF00"), 26, 9)
-$g.DrawString("DL", [System.Drawing.Font]::new("Segoe UI", 9, [System.Drawing.FontStyle]::Bold), (New-Brush "#F4F7FA"), 27, 27)
+$g.Clear([System.Drawing.Color]::White)
+$iconBg = New-Brush "#07131C"
+$iconBorder = New-Pen "#1D3542" 1
+Draw-RoundedRect $g $iconBorder $iconBg 4 4 47 47 13
+$limeGradientPath = [System.Drawing.Drawing2D.GraphicsPath]::new()
+$limeGradientPath.AddEllipse(14, 14, 27, 27)
+$limeGradient = [System.Drawing.Drawing2D.PathGradientBrush]::new($limeGradientPath)
+$limeGradient.CenterColor = [System.Drawing.ColorTranslator]::FromHtml("#B7FF00")
+$limeGradient.SurroundColors = @([System.Drawing.ColorTranslator]::FromHtml("#78FF00"))
+$g.FillEllipse($limeGradient, 14, 14, 27, 27)
+$cutout = New-Brush "#07131C"
+$mark = [System.Drawing.Drawing2D.GraphicsPath]::new()
+$mark.AddRectangle([System.Drawing.RectangleF]::new(24, 18, 7, 19))
+$mark.AddArc(25, 18, 18, 19, -90, 180)
+$mark.AddArc(25, 25, 18, 12, 90, -180)
+$mark.CloseFigure()
+$g.FillPath($cutout, $mark)
+$mark.Dispose()
+$limeGradient.Dispose()
+$limeGradientPath.Dispose()
+$iconBg.Dispose()
+$iconBorder.Dispose()
+$cutout.Dispose()
 $g.Dispose()
 Save-Bmp $small (Join-Path $Out "wizard-small.bmp")
 
