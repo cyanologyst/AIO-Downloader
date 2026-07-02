@@ -188,6 +188,11 @@ Windows setup command:
 .\scripts\package-windows-setup.ps1 -Version 1.0.0 -RebuildBundle
 ```
 
+The setup build generates branded Inno Setup wizard artwork automatically and
+uses the app icon, custom welcome/finish copy, and a short installer page that
+explains bundled runtime tools, local data storage, and the unsigned-build trust
+note.
+
 The portable folder/zip can still be generated for debugging:
 
 ```powershell

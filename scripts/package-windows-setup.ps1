@@ -25,6 +25,24 @@ function Find-Iscc {
     }
   }
 
+  $winget = Get-Command "winget" -ErrorAction SilentlyContinue
+  if ($winget) {
+    Write-Host "Inno Setup 6 was not found. Installing it with winget..."
+    & $winget.Source install --id JRSoftware.InnoSetup -e --accept-source-agreements --accept-package-agreements
+    if ($LASTEXITCODE -ne 0) {
+      throw "winget failed to install Inno Setup 6 with exit code $LASTEXITCODE"
+    }
+    foreach ($candidate in $candidates) {
+      if (Test-Path -LiteralPath $candidate) {
+        return $candidate
+      }
+    }
+    $cmd = Get-Command "iscc" -ErrorAction SilentlyContinue
+    if ($cmd) {
+      return $cmd.Source
+    }
+  }
+
   throw "Inno Setup 6 was not found. Install it with: winget install --id JRSoftware.InnoSetup -e"
 }
 
@@ -38,6 +56,11 @@ if ($RebuildBundle -or -not (Test-Path -LiteralPath (Join-Path $PackageDir "AIO 
 
 $InstallerBuildDir = Join-Path $Root "build\installer"
 New-Item -ItemType Directory -Force -Path $InstallerBuildDir | Out-Null
+
+powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\generate-installer-assets.ps1")
+if ($LASTEXITCODE -ne 0) {
+  throw "Installer branding asset generation failed with exit code $LASTEXITCODE"
+}
 
 $WebView2Setup = Join-Path $InstallerBuildDir "MicrosoftEdgeWebView2Setup.exe"
 if (-not (Test-Path -LiteralPath $WebView2Setup)) {
@@ -54,6 +77,11 @@ $IconFile = Join-Path $Root "aio_downloader_icon_windows.ico"
 if (-not (Test-Path -LiteralPath $IconFile)) {
   throw "Windows icon was expected but not found: $IconFile"
 }
+$WizardImageFile = Join-Path $Root "build\installer-branding\wizard-sidebar.bmp"
+$WizardSmallImageFile = Join-Path $Root "build\installer-branding\wizard-small.bmp"
+if (-not (Test-Path -LiteralPath $WizardImageFile) -or -not (Test-Path -LiteralPath $WizardSmallImageFile)) {
+  throw "Installer branding assets were expected but not found."
+}
 
 & $Iscc `
   "/DMyAppVersion=$Version" `
@@ -61,6 +89,8 @@ if (-not (Test-Path -LiteralPath $IconFile)) {
   "/DOutputDir=$OutputDir" `
   "/DWebView2Setup=$WebView2Setup" `
   "/DIconFile=$IconFile" `
+  "/DWizardImageFile=$WizardImageFile" `
+  "/DWizardSmallImageFile=$WizardSmallImageFile" `
   $Iss
 
 if ($LASTEXITCODE -ne 0) {
