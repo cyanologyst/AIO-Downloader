@@ -4,6 +4,7 @@ import asyncio
 import subprocess
 import shutil
 import sys
+from typing import Any
 
 
 def require_executable(name: str, friendly_name: str | None = None) -> str:
@@ -34,3 +35,19 @@ async def terminate_process(process: asyncio.subprocess.Process | None) -> None:
     except TimeoutError:
         process.kill()
         await process.wait()
+
+
+async def terminate_process_any(process: Any | None) -> None:
+    if not process:
+        return
+    if isinstance(process, asyncio.subprocess.Process):
+        await terminate_process(process)
+        return
+    if getattr(process, "poll", lambda: None)() is not None:
+        return
+    process.terminate()
+    try:
+        await asyncio.to_thread(process.wait, timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        await asyncio.to_thread(process.wait)

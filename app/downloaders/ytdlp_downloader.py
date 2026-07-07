@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -28,8 +30,10 @@ from app.services.video_sites import (
 )
 from app.services.browser_cookies import ensure_ytdlp_cookie_file
 from app.utils.paths import snapshot_files
-from app.utils.subprocess_utils import require_executable, subprocess_window_options, terminate_process
+from app.utils.subprocess_utils import require_executable, subprocess_window_options, terminate_process_any
 from app.utils.runtime import is_bundled_tool
+
+logger = logging.getLogger(__name__)
 
 
 class YtdlpDownloader(BaseDownloader):
@@ -48,7 +52,7 @@ class YtdlpDownloader(BaseDownloader):
         self.cookies_file = cookies_file
         self.proxy = proxy
         self.deno_bin = deno_bin
-        self._processes: dict[str, asyncio.subprocess.Process] = {}
+        self._processes: dict[str, object] = {}
         self._batch_pause_requested: set[str] = set()
         self._batch_skip_requested: set[str] = set()
         self._batch_cancel_requested: set[str] = set()
@@ -272,6 +276,7 @@ class YtdlpDownloader(BaseDownloader):
         assert request.destination
         destination = self._destination(request)
         destination.mkdir(parents=True, exist_ok=True)
+        logger.info("yt-dlp job %s resolving %s", context.job_id, request.url)
         title, urls = await self._resolve_batch(request)
         if not urls:
             raise RuntimeError("No downloadable items were found.")
@@ -474,10 +479,36 @@ class YtdlpDownloader(BaseDownloader):
         ) if is_adult_video_url(original_url) else None
         download_url = resolved.url if resolved else original_url
         command = self._command(request, download_url, original_url, resolved.referer if resolved else None)
-        process = await asyncio.create_subprocess_exec(
-            *command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
+        logger.info("yt-dlp job %s starting command for %s", context.job_id, original_url)
+        title = await asyncio.to_thread(
+            self._run_command_sync,
+            command,
+            destination,
+            context,
+            index,
+            total,
+        )
+        logger.info("yt-dlp job %s command finished for %s", context.job_id, original_url)
+        created = sorted(snapshot_files(destination) - before)
+        artifacts = tuple(
+            DownloadArtifact(path, self._media_type(path), path.stat().st_size)
+            for path in created
+            if path.suffix.lower() not in {".part", ".ytdl"}
+        )
+        return DownloadResult(self.provider_name, title, artifacts)
+
+    def _run_command_sync(
+        self,
+        command: list[str],
+        destination: Path,
+        context: DownloadContext,
+        index: int,
+        total: int,
+    ) -> str:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             cwd=str(destination),
             **subprocess_window_options(),
         )
@@ -487,7 +518,7 @@ class YtdlpDownloader(BaseDownloader):
         lines: list[str] = []
         try:
             assert process.stdout
-            async for raw in process.stdout:
+            for raw in iter(process.stdout.readline, b""):
                 line = raw.decode(errors="replace").strip()
                 if not line:
                     continue
@@ -528,16 +559,10 @@ class YtdlpDownloader(BaseDownloader):
                                 "total_items": total,
                             },
                         )
-            code = await process.wait()
+            code = process.wait()
             if code != 0:
                 raise RuntimeError("\n".join(lines[-10:]) or f"yt-dlp exited with code {code}")
-            created = sorted(snapshot_files(destination) - before)
-            artifacts = tuple(
-                DownloadArtifact(path, self._media_type(path), path.stat().st_size)
-                for path in created
-                if path.suffix.lower() not in {".part", ".ytdl"}
-            )
-            return DownloadResult(self.provider_name, title, artifacts)
+            return title
         finally:
             self._processes.pop(context.job_id, None)
             self._progress_samples.pop(context.job_id, None)
@@ -621,7 +646,7 @@ class YtdlpDownloader(BaseDownloader):
         if event:
             event.set()
         if process:
-            await terminate_process(process)
+            await terminate_process_any(process)
             return True
         return bool(event)
 
@@ -644,7 +669,7 @@ class YtdlpDownloader(BaseDownloader):
         if not process or job_id not in self._batch_resume_events:
             return False
         self._batch_skip_requested.add(job_id)
-        await terminate_process(process)
+        await terminate_process_any(process)
         return True
 
     async def _wait_if_batch_paused(

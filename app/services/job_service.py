@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import threading
+import time
 import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -20,6 +21,28 @@ from app.utils.paths import safe_subdir
 logger = logging.getLogger(__name__)
 
 
+def _new_event_loop() -> asyncio.AbstractEventLoop:
+    """Create a Proactor-compatible loop, retrying a rare Windows socketpair race.
+
+    Windows' default Proactor loop is required for async subprocess support. On
+    some systems, loop construction can intermittently raise
+    ``ConnectionError("Unexpected peer connection")`` while creating the
+    internal wakeup socket. Retrying keeps the desktop app launchable without
+    falling back to SelectorEventLoop, which would break downloader processes.
+    """
+
+    last_error: BaseException | None = None
+    for attempt in range(5):
+        try:
+            return asyncio.new_event_loop()
+        except ConnectionError as exc:
+            last_error = exc
+            time.sleep(0.08 * (attempt + 1))
+    if last_error:
+        raise last_error
+    return asyncio.new_event_loop()
+
+
 class JobService:
     def __init__(self, registry: DownloaderRegistry, settings: SettingsStore) -> None:
         self.registry = registry
@@ -31,7 +54,7 @@ class JobService:
         self._lock = threading.RLock()
         self._events = threading.Condition(self._lock)
         self._event_version = 0
-        self._loop = asyncio.new_event_loop()
+        self._loop = _new_event_loop()
         self._thread = threading.Thread(target=self._run_loop, name="download-loop", daemon=True)
         self._thread.start()
         self.queue = QueueService(settings.get().max_concurrent_downloads)
@@ -139,8 +162,11 @@ class JobService:
             if job_id in self._cancelled:
                 self._finish(job_id, JobStatus.CANCELLED)
             else:
-                logger.exception("Download job %s failed", job_id)
-                self._finish(job_id, JobStatus.FAILED, error=str(exc))
+                error = str(exc).encode("utf-8", errors="replace").decode("utf-8", errors="replace")
+                try:
+                    self._finish(job_id, JobStatus.FAILED, error=error)
+                finally:
+                    logger.exception("Download job %s failed", job_id)
         finally:
             self._providers.pop(job_id, None)
 

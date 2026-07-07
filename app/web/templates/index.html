@@ -6,9 +6,6 @@
   <title>AIO Downloader</title>
   <meta name="description" content="A focused standalone workspace for authorized downloads.">
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -28,25 +25,44 @@
         </button>
       </div>
     </div>
-    <header class="app-header">
-      <button class="button button-primary new-download-button" id="openDownloadDialog" type="button" aria-label="New download">
-        <i class="ti ti-plus" aria-hidden="true"></i>
-        <span>New download</span>
-      </button>
-
+    <aside class="app-sidebar" aria-label="App navigation">
       <nav class="primary-tabs" role="tablist" aria-label="Primary">
-        <button class="primary-tab active" type="button" role="tab" aria-selected="true" data-tab="downloads">Downloads</button>
-        <button class="primary-tab" type="button" role="tab" aria-selected="false" data-tab="torrents">Torrent Search</button>
-        <button class="primary-tab" type="button" role="tab" aria-selected="false" data-tab="settings">Settings</button>
+        <button class="primary-tab active" type="button" role="tab" aria-selected="true" data-tab="downloads">
+          <i class="ti ti-download" aria-hidden="true"></i><span>Downloads</span>
+        </button>
+        <button class="primary-tab" type="button" role="tab" aria-selected="false" data-tab="torrents">
+          <i class="ti ti-magnet" aria-hidden="true"></i><span>Torrent Search</span>
+        </button>
+        <button class="primary-tab" type="button" role="tab" aria-selected="false" data-tab="settings">
+          <i class="ti ti-settings" aria-hidden="true"></i><span>Settings</span>
+        </button>
       </nav>
 
-      <button class="icon-button" id="themeToggle" type="button" aria-label="Toggle theme" title="Toggle theme">
-        <i class="ti ti-moon" aria-hidden="true"></i>
-      </button>
-    </header>
+      <div class="sidebar-footer">
+        <button class="icon-button" id="themeToggle" type="button" aria-label="Toggle theme" title="Toggle theme">
+          <i class="ti ti-moon" aria-hidden="true"></i>
+        </button>
+        <span>
+          <strong>Ready</strong>
+          <small>Runs locally</small>
+        </span>
+      </div>
+    </aside>
 
-    <main class="main-content">
+    <main class="main-content app-workspace">
       <section class="tab-panel active" id="downloadsPanel" role="tabpanel">
+        <div class="page-heading downloads-page-heading">
+          <div>
+            <h1>Downloads</h1>
+            <p>Monitor active jobs, retry failed items, and manage completed files.</p>
+          </div>
+          <div class="page-heading-actions">
+            <button class="button button-primary page-new-download" id="openDownloadDialog" type="button">
+              <i class="ti ti-plus" aria-hidden="true"></i>
+              <span>New download</span>
+            </button>
+          </div>
+        </div>
         <div class="downloads-surface">
           <div class="downloads-toolbar">
             <div class="status-filters" id="historyTabs" aria-label="Filter downloads">

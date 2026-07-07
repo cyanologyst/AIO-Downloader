@@ -61,6 +61,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindInteractions();
   applySavedTheme();
   await Promise.all([loadSettings(), refreshJobs(), loadCookieBrowsers()]);
+  enhanceCustomSelects();
+  syncCustomSelects();
   await loadDependencyHealth();
   connectJobEvents();
 });
@@ -83,10 +85,196 @@ function initDialogs() {
     });
     dialog.addEventListener("cancel", (event) => {
       event.preventDefault();
+      if (dialog.querySelector(".custom-select.open")) {
+        closeCustomSelects();
+        return;
+      }
       closeDialog(dialog);
     });
     dialog.addEventListener("keydown", trapDialogFocus);
   });
+}
+
+let customSelectId = 0;
+let customSelectGlobalHandlersBound = false;
+
+function enhanceCustomSelects(root = document) {
+  $$("select:not([data-custom-select-ready])", root).forEach((select) => {
+    select.dataset.customSelectReady = "true";
+    select.classList.add("native-select-hidden");
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "custom-select";
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "custom-select-button";
+    button.setAttribute("aria-haspopup", "listbox");
+    button.setAttribute("aria-expanded", "false");
+
+    const value = document.createElement("span");
+    value.className = "custom-select-value";
+
+    const chevron = document.createElement("i");
+    chevron.className = "ti ti-chevron-down";
+    chevron.setAttribute("aria-hidden", "true");
+
+    const menu = document.createElement("div");
+    menu.className = "custom-select-menu";
+    menu.id = `customSelectMenu${++customSelectId}`;
+    menu.hidden = true;
+    menu.setAttribute("role", "listbox");
+    button.setAttribute("aria-controls", menu.id);
+
+    button.append(value, chevron);
+    wrapper.append(button, menu);
+    select.insertAdjacentElement("afterend", wrapper);
+    select._customSelect = { wrapper, button, value, menu };
+
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (select.disabled) return;
+      toggleCustomSelect(select);
+    });
+    button.addEventListener("keydown", (event) => handleCustomSelectKeydown(event, select));
+    select.addEventListener("change", () => renderCustomSelect(select));
+
+    new MutationObserver(() => renderCustomSelect(select)).observe(select, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["disabled", "label", "value"],
+    });
+
+    renderCustomSelect(select);
+  });
+
+  if (!customSelectGlobalHandlersBound) {
+    customSelectGlobalHandlersBound = true;
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest(".custom-select")) closeCustomSelects();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      if (!$(".custom-select.open")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeCustomSelects();
+    }, true);
+    window.addEventListener("resize", () => closeCustomSelects());
+  }
+}
+
+function renderCustomSelect(select) {
+  const custom = select._customSelect;
+  if (!custom) return;
+  const { wrapper, button, value, menu } = custom;
+  const selectedOption = select.options[select.selectedIndex] || select.options[0];
+  value.textContent = selectedOption?.textContent?.trim() || "Choose";
+  button.disabled = select.disabled;
+  wrapper.classList.toggle("disabled", select.disabled);
+
+  menu.innerHTML = "";
+  [...select.options].forEach((option, index) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "custom-select-option";
+    item.dataset.index = String(index);
+    item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", String(index === select.selectedIndex));
+    item.disabled = option.disabled;
+    if (index === select.selectedIndex) item.classList.add("selected");
+
+    const label = document.createElement("span");
+    label.textContent = option.textContent.trim();
+    item.append(label);
+
+    if (index === select.selectedIndex) {
+      const check = document.createElement("i");
+      check.className = "ti ti-check";
+      check.setAttribute("aria-hidden", "true");
+      item.append(check);
+    }
+
+    item.addEventListener("click", () => {
+      select.selectedIndex = index;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      closeCustomSelects();
+      button.focus({ preventScroll: true });
+    });
+    menu.append(item);
+  });
+}
+
+function toggleCustomSelect(select, force) {
+  const custom = select._customSelect;
+  if (!custom) return;
+  const opening = typeof force === "boolean" ? force : custom.menu.hidden;
+  closeCustomSelects(select);
+  custom.menu.hidden = !opening;
+  custom.button.setAttribute("aria-expanded", String(opening));
+  custom.wrapper.classList.toggle("open", opening);
+  if (opening) {
+    renderCustomSelect(select);
+    positionCustomSelectMenu(select);
+    custom.menu.querySelector(".custom-select-option.selected")?.scrollIntoView({ block: "nearest" });
+  }
+}
+
+function positionCustomSelectMenu(select) {
+  const custom = select._customSelect;
+  if (!custom) return;
+  custom.wrapper.classList.remove("drop-up");
+  const buttonRect = custom.button.getBoundingClientRect();
+  const menuRect = custom.menu.getBoundingClientRect();
+  const boundary = custom.wrapper.closest(".dialog-content, .batch-dialog-content, .torrent-dialog-content, .main-content");
+  const boundaryRect = boundary?.getBoundingClientRect();
+  const boundaryTop = boundaryRect ? Math.max(boundaryRect.top, 0) : 0;
+  const boundaryBottom = boundaryRect ? Math.min(boundaryRect.bottom, window.innerHeight) : window.innerHeight;
+  const spaceBelow = boundaryBottom - buttonRect.bottom - 12;
+  const spaceAbove = buttonRect.top - boundaryTop - 12;
+  if (menuRect.height > spaceBelow && spaceAbove > spaceBelow) {
+    custom.wrapper.classList.add("drop-up");
+  }
+}
+
+function closeCustomSelects(exceptSelect = null) {
+  $$("select[data-custom-select-ready]").forEach((select) => {
+    if (select === exceptSelect) return;
+    const custom = select._customSelect;
+    if (!custom) return;
+    custom.menu.hidden = true;
+    custom.button.setAttribute("aria-expanded", "false");
+    custom.wrapper.classList.remove("open", "drop-up");
+  });
+}
+
+function handleCustomSelectKeydown(event, select) {
+  const custom = select._customSelect;
+  if (!custom || select.disabled) return;
+
+  if (["Enter", " "].includes(event.key)) {
+    event.preventDefault();
+    toggleCustomSelect(select);
+    return;
+  }
+
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+    const options = [...select.options];
+    let nextIndex = select.selectedIndex;
+    do {
+      nextIndex = (nextIndex + direction + options.length) % options.length;
+    } while (options[nextIndex]?.disabled && nextIndex !== select.selectedIndex);
+    select.selectedIndex = nextIndex;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    toggleCustomSelect(select, true);
+  }
+}
+
+function syncCustomSelects(root = document) {
+  $$("select[data-custom-select-ready]", root).forEach((select) => renderCustomSelect(select));
 }
 
 function bindInteractions() {
@@ -204,6 +392,10 @@ function bindInteractions() {
 function handleDocumentActions(event) {
   const action = event.target.closest("[data-action]");
   if (!action) return;
+  if (action.dataset.action === "open-download-dialog") {
+    event.preventDefault();
+    openDownloadDialog();
+  }
   if (action.dataset.action === "open-cookie-settings") {
     event.preventDefault();
     closeDialog($("#downloadDialog"));
@@ -448,6 +640,7 @@ function resetDownloadOptions() {
   $("#playlistInput").checked = false;
   updateContextOptions();
   updateDownloadValidation();
+  syncCustomSelects();
 }
 
 async function api(path, options = {}) {
@@ -1360,6 +1553,8 @@ async function loadSettings() {
     });
     resetDownloadOptions();
     updateCookieFileHint();
+    enhanceCustomSelects(form);
+    syncCustomSelects(form);
   } catch (error) {
     toast(error.message, true);
   }
@@ -1378,6 +1573,8 @@ async function loadCookieBrowsers() {
     const firefox = state.cookieBrowsers.find((browser) => browser.id === "firefox" && (browser.profiles || []).length);
     if (firefox) browserInput.value = "firefox";
     renderCookieProfiles();
+    enhanceCustomSelects();
+    syncCustomSelects();
     if (status && !state.cookieBrowsers.length) status.textContent = "No supported browser cookie sources were detected.";
   } catch (error) {
     if (status) status.textContent = `Could not inspect browser profiles: ${error.message}`;
@@ -1404,6 +1601,8 @@ function renderCookieProfiles() {
       : "Choose a browser/profile, then fetch to create a local cookies file.";
     status.classList.toggle("warning", isChromium);
   }
+  enhanceCustomSelects();
+  syncCustomSelects();
 }
 
 async function fetchBrowserCookies() {

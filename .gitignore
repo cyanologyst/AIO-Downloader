@@ -8,6 +8,8 @@ config/settings.json
 config/jobs.json
 config/batches/
 config/webview/
+webview/
+qa/
 Download/
 logs/
 build/
